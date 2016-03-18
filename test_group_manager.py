@@ -1,5 +1,6 @@
 import os, time
-from pyndn import Name, Data, Face, Interest, Exclude
+from pyndn import Name, Face, Data, Interest, Exclude
+from pyndn.threadsafe_face import ThreadsafeFace
 from pyndn.util import Blob, MemoryContentCache
 from pyndn.encrypt import GroupManager, Sqlite3GroupManagerDb, EncryptedContent
 from pyndn.encrypt import Schedule, RepetitiveInterval, DecryptKey, EncryptKey
@@ -9,6 +10,8 @@ from pyndn.security.identity import IdentityManager
 from pyndn.security.identity import MemoryIdentityStorage, MemoryPrivateKeyStorage
 from pyndn.security.policy import NoVerifyPolicyManager
 
+import trollius as asyncio
+
 DATA_CONTENT = bytearray([
     0xcb, 0xe5, 0x6a, 0x80, 0x41, 0x24, 0x58, 0x23,
     0x84, 0x14, 0x15, 0x61, 0x80, 0xb9, 0x5e, 0xbd,
@@ -17,9 +20,10 @@ DATA_CONTENT = bytearray([
 ])
 
 class TestGroupManager(object):
-    def __init__(self, face):
+    def __init__(self, face, identityName, groupManagerName, dKeyDatabaseFilePath):
         # Set up face
         self.face = face
+        #self.loop = eventLoop
 
         # Set up the keyChain.
         identityStorage = MemoryIdentityStorage()
@@ -27,13 +31,13 @@ class TestGroupManager(object):
         self.keyChain = KeyChain(
           IdentityManager(identityStorage, privateKeyStorage),
           NoVerifyPolicyManager())
-        identityName = Name("prefix")
+
         self.certificateName = self.keyChain.createIdentityAndCertificate(identityName)
         self.keyChain.getIdentityManager().setDefaultIdentity(identityName)
 
         self.face.setCommandSigningInfo(self.keyChain, self.certificateName)
 
-        self.dKeyDatabaseFilePath = "policy_config/manager-d-key-test.db"
+        self.dKeyDatabaseFilePath = dKeyDatabaseFilePath
         try:
             os.remove(self.dKeyDatabaseFilePath)
         except OSError:
@@ -41,7 +45,7 @@ class TestGroupManager(object):
             pass
 
         self.manager = GroupManager(
-          identityName, Name("a"),
+          identityName, groupManagerName,
           Sqlite3GroupManagerDb(self.dKeyDatabaseFilePath), 2048, 1,
           self.keyChain)
 
@@ -70,8 +74,10 @@ class TestGroupManager(object):
 
         self.manager.addSchedule("schedule1", schedule1)
 
+    # Keep trying until member certificate is retrieved
+    def retrieveMemeberCertificate(self, memberName):
         # TODO: for now, we ignore the ksk-timestamp component in this request
-        memberA = Name("/ndn/member0/KEY/")
+        memberA = Name(memberName)
         interest = Interest(memberA)
         interest.setInterestLifetimeMilliseconds(4000)
         print "Retrieving member certificate: " + interest.getName().toUri()
@@ -84,9 +90,10 @@ class TestGroupManager(object):
 
     def onMemberCertificateTimeout(self, interest):
         print "Member certificate interest times out: " + interest.getName().toUri()
+        self.retrieveMemeberCertificates(interest.getName())
         return
 
-    def getAndPublishGroupKeys(self):
+    def publishGroupKeys(self):
         timePoint1 = Schedule.fromIsoString("20150825T093000")
         result = self.manager.getGroupKey(timePoint1)
 
@@ -94,7 +101,7 @@ class TestGroupManager(object):
         # The rest are group private keys encrypted with each member's public key, D-key
         for i in range(0, len(result)):
             self.memoryContentCache.add(result[i])
-            print "group getKeys result name: " + str(i) + " " + result[i].getName().toUri()
+            print "Publish key name: " + str(i) + " " + result[i].getName().toUri()
 
     def onDataNotFound(self, prefix, interest, face, interestFilterId, filter):
         print "Data not found for interest: " + interest.getName().toUri()
@@ -108,15 +115,22 @@ class TestGroupManager(object):
 
 if __name__ == "__main__":
     print "Start NAC group manager test"
+    #loop = asyncio.get_event_loop()
     face = Face()
-    testGroupManager = TestGroupManager(face)
+
+    identityName = Name("/org/openmhealth/zhehao/data/fitness")
+    groupManagerName = Name("/org/openmhealth/zhehao/data/fitness")
+
+    testGroupManager = TestGroupManager(face, identityName, groupManagerName, "policy_config/manager-d-key-test.db")
     testGroupManager.setManager()
+    testGroupManager.retrieveMemeberCertificate(Name("/ndn/member0/KEY/"))
+    testGroupManager.publishGroupKeys()
     
     while True:
         face.processEvents()
 
         if testGroupManager.generateGroupKeyFlag:
-            testGroupManager.getAndPublishGroupKeys()
+            testGroupManager.publishGroupKeys()
             testGroupManager.generateGroupKeyFlag = False
 
         # We need to sleep for a few milliseconds so we don't use 100% of the CPU.

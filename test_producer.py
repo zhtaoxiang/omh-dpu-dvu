@@ -16,24 +16,18 @@ DATA_CONTENT = bytearray([
     0x19, 0x00, 0x80, 0x8b, 0xfa, 0x00, 0x05, 0x9c
 ])
 
-class TestProducer(object):
-    def __init__(self, face):
+class DPUProducer(object):
+    def __init__(self, face, memoryContentCache, producerPrefix, producerSuffix, keyChain, certificateName, databaseFilePath):
         # Set up face
         self.face = face
 
-        # Set up the keyChain.
-        identityStorage = MemoryIdentityStorage()
-        privateKeyStorage = MemoryPrivateKeyStorage()
-        self.keyChain = KeyChain(
-          IdentityManager(identityStorage, privateKeyStorage),
-          NoVerifyPolicyManager())
-        identityName = Name("TestProducer")
-        self.certificateName = self.keyChain.createIdentityAndCertificate(identityName)
-        self.keyChain.getIdentityManager().setDefaultIdentity(identityName)
+        self.certificateName = Name(certificateName)
+        self.keyChain = keyChain
 
         self.face.setCommandSigningInfo(self.keyChain, self.certificateName)
 
-        self.databaseFilePath = "policy_config/test_producer.db"
+        # Reset producer db
+        self.databaseFilePath = databaseFilePath
         try:
             os.remove(self.databaseFilePath)
         except OSError:
@@ -41,13 +35,9 @@ class TestProducer(object):
             pass
         
         self.testDb = Sqlite3ProducerDb(self.databaseFilePath)
-        prefix = Name("/prefix")
-        suffix = Name("/a/b/c")
 
-        self.producer = Producer(prefix, suffix, self.face, self.keyChain, self.testDb)
-
-        self.memoryContentCache = MemoryContentCache(self.face)
-        self.memoryContentCache.registerPrefix(prefix, self.onRegisterFailed, self.onDataNotFound)
+        self.producer = Producer(producerPrefix, producerSuffix, self.face, self.keyChain, self.testDb)
+        self.memoryContentCache = memoryContentCache
         return
 
     def onDataNotFound(self, prefix, interest, face, interestFilterId, filter):
@@ -62,9 +52,9 @@ class TestProducer(object):
         print "Creating content key"
         contentKeyName = self.producer.createContentKey(timeSlot, self.onEncryptedKeys)
 
-    def produce(self, timeSlot):
+    def produce(self, timeSlot, content):
         emptyData = Data()
-        self.producer.produce(emptyData, timeSlot, Blob(DATA_CONTENT, False))
+        self.producer.produce(emptyData, timeSlot, Blob(content, False))
         producedName = emptyData.getName()
 
         # Test the length of encrypted data
@@ -90,10 +80,18 @@ class TestProducer(object):
 if __name__ == "__main__":
     print "Start NAC producer test"
     face = Face()
-    testProducer = TestProducer(face)
+
+    nameString = "/org/openmhealth/zhehao/data/fitness/physical_activity/bout/bounding_box"
+    identityName = Name(nameString)
+    prefix = Name(nameString)
+    suffix = Name()
+    databaseFilePath = "policy_config/test_producer.db"
+
+    testProducer = DPUProducer(face, identityName, prefix, suffix, databaseFilePath)
+
     testTime1 = Schedule.fromIsoString("20150825T080000")
     testProducer.createContentKey(testTime1)
-    testProducer.produce(testTime1)
+    testProducer.produce(testTime1, DATA_CONTENT)
     print "Produced"
     # TODO: getting the encrypted C-key to the group manager
 

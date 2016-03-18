@@ -1,0 +1,24 @@
+<html xmlns = "http://www.w3.org/1999/xhtml">
+<meta charset="UTF-8">
+
+<head>
+  <title>NDNFit Consumer Webpage</title>
+
+  <script type="text/javascript" src="js/ndn-js.min.js"></script>
+  <script type="text/javascript" src="js/consumer.js"></script>
+  
+  <script type="text/javascript">
+    catalogProbeFinishedCallback = function (catalogs) {
+      getData(catalogs);
+    }
+  </script>
+</head>
+
+<body>
+  <button id="userBtn" onclick="getUsers()">Scan users</button>
+  <button id="testBtn" onclick="getCatalogs()">Start consumer</button>
+  <button id="testBtn" onclick="issueDPUInterest()">Call DPU</button>
+  <p id="content">Content: <br/></p>
+</body>
+
+<html>

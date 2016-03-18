@@ -16,30 +16,21 @@ DATA_CONTENT = bytearray([
     0x19, 0x00, 0x80, 0x8b, 0xfa, 0x00, 0x05, 0x9c
 ])
 
-class TestConsumer(object):
-    def __init__(self, face):
+class DPUConsumer(object):
+    def __init__(self, face, memoryContentCache, groupName, keyChain, certificateName, databaseFilePath):
         # Set up face
         self.face = face
 
-        self.databaseFilePath = "policy_config/test_consumer.db"
+        self.databaseFilePath = databaseFilePath
         try:
             os.remove(self.databaseFilePath)
         except OSError:
             # no such file
             pass
 
-        self.groupName = Name("/prefix/READ/a")
-
-        # Set up the keyChain.
-        identityStorage = BasicIdentityStorage()
-        privateKeyStorage = FilePrivateKeyStorage()
-        self.keyChain = KeyChain(
-          IdentityManager(identityStorage, privateKeyStorage),
-          NoVerifyPolicyManager())
-        identityName = Name("/ndn/member0")
-        self.certificateName = self.keyChain.createIdentityAndCertificate(identityName)
-
-        self.face.setCommandSigningInfo(self.keyChain, self.certificateName)
+        self.groupName = Name(groupName)
+        self.certificateName = Name(certificateName)
+        self.keyChain = keyChain
 
         consumerKeyName = IdentityCertificate.certificateNameToPublicKeyName(self.certificateName)
         consumerCertificate = identityStorage.getCertificate(self.certificateName, True)
@@ -54,19 +45,13 @@ class TestConsumer(object):
         der = Blob(base64.b64decode(base64Content), False)
         self.consumer.addDecryptionKey(consumerKeyName, der)
 
-        self.memoryContentCache = MemoryContentCache(self.face)
-        self.memoryContentCache.registerPrefix(identityName, self.onRegisterFailed, self.onDataNotFound)
+        self.memoryContentCache = memoryContentCache
         self.memoryContentCache.add(consumerCertificate)
-        print "Consumer certificate name: " + self.certificateName.toUri()
-        print "Consumer key name: " + consumerKeyName.toUri()
-        return
 
-    def onDataNotFound(self, prefix, interest, face, interestFilterId, filter):
-        print "Data not found for interest: " + interest.getName().toUri()
-        return
-
-    def onRegisterFailed(self, prefix):
-        print "Prefix registration failed"
+        # self.memoryContentCache.registerPrefix(identityName, self.onRegisterFailed, self.onDataNotFound)
+        
+        # print "Consumer certificate name: " + self.certificateName.toUri()
+        # print "Consumer key name: " + consumerKeyName.toUri()
         return
 
     def consume(self, contentName):
@@ -93,9 +78,24 @@ class TestConsumer(object):
         print "Consume error " + str(code) + ": " + message
 
 if __name__ == "__main__":
+
+    # Set up the keyChain.
+    # identityStorage = BasicIdentityStorage()
+    # privateKeyStorage = FilePrivateKeyStorage()
+    # self.keyChain = KeyChain(
+    #   IdentityManager(identityStorage, privateKeyStorage),
+    #   NoVerifyPolicyManager())
+    # identityName = Name(consumerIdentity)
+    # self.certificateName = self.keyChain.createIdentityAndCertificate(identityName)
+
+    # self.face.setCommandSigningInfo(self.keyChain, self.certificateName)
+
     print "Start NAC consumer test"
     face = Face()
-    testConsumer = TestConsumer(face)
+    groupName = Name("/org/openmhealth/zhehao/data/fitness")
+    consumerIdentity = Name("/org/openmhealth/zhehao/data/fitness")
+    testConsumer = DPUConsumer(face, consumerIdentity, groupName, "policy_config/test_consumer.db")
+
     contentName = Name("/prefix/SAMPLE/a/b/c/20150825T080000")
     testConsumer.consume(contentName)
     print "Trying to consume: " + contentName.toUri()
