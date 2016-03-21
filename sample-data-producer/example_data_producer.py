@@ -1,5 +1,5 @@
 import unittest as ut
-import os, time, json
+import os, time, json, random
 from pyndn import Name, Data, Face, Interest
 from pyndn.util import Blob, MemoryContentCache
 from pyndn.encrypt import Producer, Schedule, Sqlite3ProducerDb, EncryptedContent
@@ -16,7 +16,7 @@ import repo_command_parameter_pb2
 import repo_command_response_pb2
 
 class SampleProducer(object):
-    def __init__(self, face, username):
+    def __init__(self, face, username, memoryContentCache):
         # Set up face
         self.face = face
 
@@ -46,16 +46,7 @@ class SampleProducer(object):
 
         self.producer = Producer(prefix, suffix, self.face, self.keyChain, self.testDb)
 
-        self.memoryContentCache = MemoryContentCache(self.face)
-        self.memoryContentCache.registerPrefix(prefix, self.onRegisterFailed, self.onDataNotFound)
-        return
-
-    def onDataNotFound(self, prefix, interest, face, interestFilterId, filter):
-        print "Data not found for interest: " + interest.getName().toUri()
-        return
-
-    def onRegisterFailed(self, prefix):
-        print "Prefix registration failed"
+        self.memoryContentCache = memoryContentCache
         return
 
     def createContentKey(self, timeSlot):
@@ -74,7 +65,15 @@ class SampleProducer(object):
           .append(Name.Component(ProtobufTlv.encode(parameter))))
         self.face.makeCommandInterest(interest)
 
-        # self.face.expressInterest(interest, self.onRepoInterest, self.onRepoTimeout)
+        self.face.expressInterest(interest, self.onRepoData, self.onRepoTimeout)
+
+    def onRepoData(self, interest, data):
+        print "received repo data: " + interest.getName().toUri()
+        return
+
+    def onRepoTimeout(self, interest):
+        print "repo command times out: " + interest.getName().toUri()
+        return
 
     def onEncryptedKeys(self, keys):
         print "onEncryptedKeys called"
@@ -86,15 +85,24 @@ class SampleProducer(object):
             self.initiateContentStoreInsertion("/ndn/edu/ucla/remap/ndnfit/repo", keys[i])
         return
 
+
+def onDataNotFound(prefix, interest, face, interestFilterId, filter):
+    print "Data not found for interest: " + interest.getName().toUri()
+    return
+
+def onRegisterFailed(prefix):
+    print "Prefix registration failed"
+    return
+
 if __name__ == "__main__":
     print "Start NAC producer test"
     face = Face()
-
+    memoryContentCache = MemoryContentCache(face)
     # Produce encrypted data for this user
     username = "/org/openmhealth/zhehao/"
     # Insert into this repo
     repoPrefix = "/ndn/edu/ucla/remap/ndnfit/repo"
-    testProducer = SampleProducer(face, username)
+    testProducer = SampleProducer(face, username, memoryContentCache)
 
     basetimeString = "20160320T080"
     baseZFill = 3
@@ -108,6 +116,8 @@ if __name__ == "__main__":
     timeFloat = Schedule.fromIsoString(originalTimeString)
     testProducer.createContentKey(timeFloat)
 
+    memoryContentCache.registerPrefix(Name(username), onRegisterFailed, onDataNotFound)
+
     catalogData = Data(Name(username).append(Name("/data/fitness/physical_activity/time_location/catalog/")).append(originalTimeString).appendVersion(1))
     catalogContentArray = []
 
@@ -116,11 +126,12 @@ if __name__ == "__main__":
         timeString = basetimeString + str(i).zfill(baseZFill)
         timeFloat = Schedule.fromIsoString(timeString)
 
-        dataObject = json.dumps({"lat": baseLat, "timestamp": int(timeFloat / 1000), "lng": baseLng})
+        dataObject = json.dumps({"lat": baseLat + random.randint(-10, 10), "timestamp": int(timeFloat / 1000), "lng": baseLng + random.randint(-10, 10)})
         print timeFloat
         testProducer.producer.produce(emptyData, timeFloat, Blob(dataObject, False))
         producedName = emptyData.getName()
         print "Produced name: " + producedName.toUri() + "; Produced content: " + str(dataObject)
+        memoryContentCache.add(emptyData)
 
         # Insert content into repo-ng
         testProducer.initiateContentStoreInsertion(repoPrefix, emptyData)
@@ -130,10 +141,11 @@ if __name__ == "__main__":
     testProducer.keyChain.sign(catalogData)
     print "Produced name: " + producedName.toUri() + "; Produced content: " + str(catalogContentArray)
     testProducer.initiateContentStoreInsertion(repoPrefix, catalogData)
-
+    memoryContentCache.add(catalogData)
 
     # Produce unencrypted data for this user
     unencryptedUserName = "/org/openmhealth/haitao"
+    memoryContentCache.registerPrefix(Name(unencryptedUserName), onRegisterFailed, onDataNotFound)
 
     catalogData = Data(Name(unencryptedUserName).append(Name("/data/fitness/physical_activity/time_location/catalog/")).append(originalTimeString).appendVersion(1))
     catalogContentArray = []
@@ -142,7 +154,7 @@ if __name__ == "__main__":
         timeString = basetimeString + str(i).zfill(baseZFill)
         timeFloat = Schedule.fromIsoString(timeString)
 
-        dataObject = json.dumps({"lat": baseLat, "timestamp": int(timeFloat / 1000), "lng": baseLng})
+        dataObject = json.dumps({"lat": baseLat + random.randint(-10, 10), "timestamp": int(timeFloat / 1000), "lng": baseLng + random.randint(-10, 10)})
         unencryptedData = Data(Name(unencryptedUserName).append(Name("/data/fitness/physical_activity/time_location/SAMPLE")).append(timeString))
         unencryptedData.setContent(dataObject)
         testProducer.keyChain.sign(unencryptedData)
@@ -152,11 +164,15 @@ if __name__ == "__main__":
         testProducer.initiateContentStoreInsertion("/ndn/edu/ucla/remap/ndnfit/repo", unencryptedData)
         catalogContentArray.append(int(timeFloat / 1000))
 
+        memoryContentCache.add(unencryptedData)
+
+
     # Insert catalog into repo-ng
     catalogData.setContent(json.dumps(catalogContentArray))
     testProducer.keyChain.sign(catalogData)
     print "Produced name: " + catalogData.getName().toUri() + "; Produced content: " + str(catalogContentArray)
     testProducer.initiateContentStoreInsertion(repoPrefix, catalogData)
+    memoryContentCache.add(catalogData)
 
     while True:
         face.processEvents()
