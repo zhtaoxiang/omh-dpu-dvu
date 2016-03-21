@@ -49,6 +49,11 @@ var consumerIdentityName = new Name("/org/openmhealth/dvu");
 var memoryContentCache = new MemoryContentCache(face);
 var certificateName = undefined;
 
+// For now, hard-coded group name
+var groupName = new Name("/org/openmhealth/zhehao");
+var consumerDb = new IndexedDbConsumerDb();
+var nacConsumer = new Consumer(face, keyChain, groupName, consumerIdentityName, consumerDb);
+
 this.keyChain.createIdentityAndCertificate(consumerIdentityName, function(myCertificateName) {
   console.log("myCertificateName: " + myCertificateName.toUri());
   certificateName = myCertificateName;
@@ -56,13 +61,26 @@ this.keyChain.createIdentityAndCertificate(consumerIdentityName, function(myCert
   face.setCommandSigningInfo(keyChain, myCertificateName);
   memoryContentCache.registerPrefix(consumerIdentityName, onRegisterFailed, onDataNotFound);
   
-  self.keyChain.getIdentityManager().identityStorage.getCertificatePromise(myCertificateName, true).then(function(certificate) {
+  keyChain.getIdentityManager().identityStorage.getCertificatePromise(myCertificateName, true).then(function(certificate) {
     certBase64String = certificate.wireEncode().buf().toString('base64');
     memoryContentCache.add(certificate);
   });
+  
+  // Make sure we can decrypt the encrypted D-key
+  getPrivateKeyAndInsertPromise(privateKeyStorage, IdentityCertificate.certificateNameToPublicKeyName(myCertificateName), consumerDb);
 }, function (error) {
   console.log("Error in createIdentityAndCertificate: " + error);
 });
+
+// Hack for get private key promise...
+function getPrivateKeyAndInsertPromise(privateKeyDb, keyName, consumerDb) {
+  return privateKeyDb.database.privateKey.get
+    (IndexedDbPrivateKeyStorage.transformName(keyName))
+  .then(function(privateKeyEntry) {
+    console.log(privateKeyEntry);
+    return consumerDb.addKeyPromise(keyName, privateKeyEntry.encoding);
+  })
+}
 
 function onRegisterFailed(prefix) {
   console.log("Register failed for prefix: " + prefix);
