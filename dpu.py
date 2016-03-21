@@ -110,7 +110,7 @@ class DPU(object):
         nextCatalogInterest.setExclude(exclude)
         nextCatalogInterest.setChildSelector(0)
         nextCatalogInterest.setMustBeFresh(True)
-        nextCatalogInterest.setInterestLifetimeMilliseconds(4000)
+        nextCatalogInterest.setInterestLifetimeMilliseconds(2000)
         self.face.expressInterest(nextCatalogInterest, self.onCatalogData, self.onCatalogTimeout)
         print "Expressed catalog interest " + nextCatalogInterest.getName().toUri()
 
@@ -128,7 +128,7 @@ class DPU(object):
             # For encrypted data, timestamp format will have to change
             rawDataName = Name(self.rawDataPrefix).appendTimestamp(timestamp)
             dataInterest = Interest(rawDataName)
-            dataInterest.setInterestLifetimeMilliseconds(4000)
+            dataInterest.setInterestLifetimeMilliseconds(2000)
             dataInterest.setMustBeFresh(True)
             self.face.expressInterest(dataInterest, self.onRawData, self.onRawDataTimeout)
             self.remainingData += 1
@@ -204,6 +204,8 @@ class DPU(object):
             data = Data(Name(self.identityName).append("SAMPLE").append("20150825T080000"))
             data.getMetaInfo().setFreshnessPeriod(400000)
             data.setContent(result)
+
+            # If the interest's still within lifetime, this will satisfy the interest
             self.memoryContentCache.add(data)
             print "Produced data with name " + data.getName().toUri()
 
