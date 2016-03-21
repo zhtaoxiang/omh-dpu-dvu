@@ -207,11 +207,26 @@ function getEncryptedData(catalogs) {
     for (catalog in catalogs[username]) {
       for (dataItem in catalogs[username][catalog].content) {
         var isoTimeString = Schedule.toIsoString(catalogs[username][catalog].content[dataItem] * 1000);
-        var interest = new Interest(new Name(name).append("SAMPLE").append(isoTimeString));
-        // TODO: user consumer.consume
+        var isoTimeString = Schedule.toIsoString(catalogs[username][catalog].content[dataItem] * 1000);
+        nacConsumer.consume(new Name(name).append("SAMPLE").append(isoTimeString), onConsumeComplete, onConsumeFailed);
       }
     }
   }
+}
+
+function onConsumeComplete(data, result) {
+  console.log("Consumed fitness data: " + data.getName().toUri());
+  //var content = JSON.parse(data.getContent().buf().toString('binary'));
+  //console.log("Fitness payload: " + JSON.stringify(content));
+  //console.log("Data keyLocator keyName: " + data.getSignature().getKeyLocator().getKeyName().toUri());
+  //for (var i = 0; i < content.length; i++) {
+  //  document.getElementById("content").innerHTML += formatTime(content[i].timeStamp) + "  " + JSON.stringify(content[i]) + "<br>";
+  //}
+  console.log(result);
+}
+
+function onConsumeFailed(code, message) {
+  console.log("Consume failed: " + code + " : " + message);
 }
 
 function requestDataAccess(username) {
@@ -228,7 +243,7 @@ function requestDataAccess(username) {
   interest.setMustBeFresh(true);
 
   console.log("Express name " + name.toUri());
-  face.expressInterest(interest, onCatalogData, onCatalogTimeout);
+  face.expressInterest(interest, onAccessRequestData, onAccessRequestTimeout);
 }
 
 function onAccessRequestData(interest, data) {
@@ -297,7 +312,26 @@ var onAppDataTimeout = function (interest) {
 }
 
 // Calling DPU
-function issueDPUInterest() {
-  // The interest would reach DSU, who replies if data's already generated (otherwise, call DPU to generate this data)
-  var interest = new Interest("/org/openmhealth/zhehao/data/fitness/physical_activity/bout/bounding_box/SAMPLE/20150825T080000/");
+function issueDPUInterest(username) {
+  if (username == undefined) {
+    username = Config.defaultUsername;
+  }
+  var name = new Name(Config.defaultPrefix).append(new Name(username)).append(new Name("data/fitness/physical_activity/genericfunctions/bounding_box/20160320T080030"));
+  var interest = new Interest(name);
+  interest.setMustBeFresh(true);
+
+  console.log("Express name " + name.toUri());
+  face.expressInterest(interest, onDPUData, onDPUData);
+}
+
+function onDPUData(interest, data) {
+  console.log("onDPUData: " + data.getName().toUri());
+  console.log(data.getContent());
+}
+
+function onDPUTimeout(interest) {
+  console.log("onDPUTimeout: " + interest.getName().toUri());
+  var interest = new Interest(interest);
+  interest.refreshNonce();
+  face.expressInterest(interest, onDPUData, onDPUTimeout);
 }

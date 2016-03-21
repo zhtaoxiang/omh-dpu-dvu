@@ -29,6 +29,15 @@
         requestDataAccess();
       }
     }
+
+    function issueDPUInterestClick() {
+      var username = document.getElementById("userInput").value;
+      if (username != "" && username != undefined) {
+        issueDPUInterest(username);
+      } else {
+        issueDPUInterest();
+      }
+    }
   </script>
 </head>
 
@@ -37,7 +46,7 @@
 
   <button id="userBtn" onclick="getUsers()">Scan users</button> <br>
   <button id="catalogBtn" onclick="getCatalogsClick()">Get data</button> <br>
-  <button id="dpuBtn" onclick="issueDPUInterest()">Call DPU</button> <br>
+  <button id="dpuBtn" onclick="issueDPUInterestClick()">Call DPU</button> <br>
   <button id="dpuBtn" onclick="requestDataAccessClick()">Request data access</button> <br>
   <p id="content">Content: <br/></p>
 </body>
