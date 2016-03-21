@@ -9,15 +9,36 @@
   
   <script type="text/javascript">
     catalogProbeFinishedCallback = function (catalogs) {
-      getData(catalogs);
+      getUnencryptedData(catalogs);
+    }
+
+    function getCatalogsClick() {
+      var username = document.getElementById("userInput").value;
+      if (username != "" && username != undefined) {
+        getCatalogs(username);
+      } else {
+        getCatalogs();
+      }
+    }
+
+    function requestDataAccessClick() {
+      var username = document.getElementById("userInput").value;
+      if (username != "" && username != undefined) {
+        requestDataAccess(username);
+      } else {
+        requestDataAccess();
+      }
     }
   </script>
 </head>
 
 <body>
-  <button id="userBtn" onclick="getUsers()">Scan users</button>
-  <button id="testBtn" onclick="getCatalogs()">Start consumer</button>
-  <button id="testBtn" onclick="issueDPUInterest()">Call DPU</button>
+  <input id="userInput" type="text"></input> <br>
+
+  <button id="userBtn" onclick="getUsers()">Scan users</button> <br>
+  <button id="catalogBtn" onclick="getCatalogsClick()">Get data</button> <br>
+  <button id="dpuBtn" onclick="issueDPUInterest()">Call DPU</button> <br>
+  <button id="dpuBtn" onclick="requestDataAccessClick()">Request data access</button> <br>
   <p id="content">Content: <br/></p>
 </body>
 

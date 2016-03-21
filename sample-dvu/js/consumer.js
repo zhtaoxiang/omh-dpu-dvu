@@ -13,15 +13,16 @@ var Exclude = require('ndn-js').Exclude;
 // Data recorded this morning: z8miG6uIvHZBqdXyExbd0BIyB1CGRzQQ81T6b2xHuc8qTKnopYFri3WEzeUt
 
 var Config = {
-	hostName: "memoria.ndn.ucla.edu",
+	hostName: "localhost",
   wsPort: 9696,
-  defaultUsername: "S9v62lEnQf6PSsdSarGm6ulPEfHSZ12ERBZlGBt6tflHvf4tQR7lsD2wbCzO",
+  defaultUsername: "haitao",
   defaultPrefix: "/org/openmhealth/",
   catalogPrefix: "/data/fitness/physical_activity/time_location/catalog/",
   dataPrefix: "/data/fitness/physical_activity/time_location/",
   defaultInterestLifetime: 1000,
-  // not a reliable way for determining if probe has finished
-  catalogTimeoutThreshold: 3
+
+  // not a reliable way for determining if catalog probe has finished
+  catalogTimeoutThreshold: 1
 }
 
 var face = new Face({host: Config.hostName, port: Config.wsPort});
@@ -31,6 +32,45 @@ var userCatalogs = [];
 var catalogProbeFinished = false;
 
 var catalogProbeFinishedCallback = null;
+
+// Setting up keyChain
+var identityStorage = new IndexedDbIdentityStorage();
+var privateKeyStorage = new IndexedDbPrivateKeyStorage();
+var policyManager = new NoVerifyPolicyManager();
+
+var certBase64String = "";
+
+var keyChain = new KeyChain
+  (new IdentityManager(identityStorage, privateKeyStorage),
+   policyManager);
+keyChain.setFace(face);
+
+var consumerIdentityName = new Name("/org/openmhealth/dvu");
+var memoryContentCache = new MemoryContentCache(face);
+var certificateName = undefined;
+
+this.keyChain.createIdentityAndCertificate(consumerIdentityName, function(myCertificateName) {
+  console.log("myCertificateName: " + myCertificateName.toUri());
+  certificateName = myCertificateName;
+
+  face.setCommandSigningInfo(keyChain, myCertificateName);
+  memoryContentCache.registerPrefix(consumerIdentityName, onRegisterFailed, onDataNotFound);
+  
+  self.keyChain.getIdentityManager().identityStorage.getCertificatePromise(myCertificateName, true).then(function(certificate) {
+    certBase64String = certificate.wireEncode().buf().toString('base64');
+    memoryContentCache.add(certificate);
+  });
+}, function (error) {
+  console.log("Error in createIdentityAndCertificate: " + error);
+});
+
+function onRegisterFailed(prefix) {
+  console.log("Register failed for prefix: " + prefix);
+}
+
+function onDataNotFound(prefix, interest, face, interestFilterId, filter) {
+  console.log("Data not found for interest: " + interest.getName().toUri());
+}
 
 var onCatalogData = function(interest, data) {
   var catalogTimestamp = data.getName().get(-2);
@@ -68,18 +108,18 @@ var onCatalogVersionData = function(interest, data) {
   var dataContent = JSON.parse(data.getContent().buf().toString('binary'));
   var username = interest.getName().get(2).toEscapedString();
   if (username in userCatalogs) {
-    if (catalogTimestamp.toTimestamp() in userCatalogs[username]) {
-      if (userCatalogs[username][catalogTimestamp.toTimestamp()].last_version < catalogVersion.toVersion()) {
-        userCatalogs[username][catalogTimestamp.toTimestamp()] = {"last_version": catalogVersion.toVersion(), "content": dataContent};
+    if (catalogTimestamp.toEscapedString() in userCatalogs[username]) {
+      if (userCatalogs[username][catalogTimestamp.toEscapedString()].last_version < catalogVersion.toVersion()) {
+        userCatalogs[username][catalogTimestamp.toEscapedString()] = {"last_version": catalogVersion.toVersion(), "content": dataContent};
       } else {
         console.log("Received duplicate or previous version.");
       }
     } else {
-      userCatalogs[username][catalogTimestamp.toTimestamp()] = {"last_version": catalogVersion.toVersion(), "content": dataContent};
+      userCatalogs[username][catalogTimestamp.toEscapedString()] = {"last_version": catalogVersion.toVersion(), "content": dataContent};
     }
   } else {
     userCatalogs[username] = [];
-    userCatalogs[username][catalogTimestamp.toTimestamp()] = {"last_version": catalogVersion.toVersion(), "content": dataContent};
+    userCatalogs[username][catalogTimestamp.toEscapedString()] = {"last_version": catalogVersion.toVersion(), "content": dataContent};
   }
 }
 
@@ -104,11 +144,11 @@ var onCatalogTimeout = function(interest) {
 };
 
 // given a userPrefix, populates userCatalogs[username] with all of its catalogs
-function getCatalogs(userPrefix) {
-  if (userPrefix == undefined) {
-    userPrefix = Config.defaultPrefix + Config.defaultUsername;
+function getCatalogs(username) {
+  if (username == undefined) {
+    username = Config.defaultUsername;
   }
-  var name = new Name(userPrefix + Config.catalogPrefix);
+  var name = new Name(Config.defaultPrefix).append(new Name(username)).append(new Name(Config.catalogPrefix));
   var interest = new Interest(name);
   interest.setInterestLifetimeMilliseconds(Config.defaultInterestLifetime);
   // start from leftmost child
@@ -118,11 +158,11 @@ function getCatalogs(userPrefix) {
   console.log("Express name " + name.toUri());
   face.expressInterest(interest, onCatalogData, onCatalogTimeout);
 
-  document.getElementById("content").innerHTML += "Fetching fitness data under prefix: " + userPrefix + "<br>";
-;
+  document.getElementById("content").innerHTML += "Fetching fitness data under name: " + username + "<br>";
 };
 
-function getData(catalogs) {
+// For unencrypted data
+function getUnencryptedData(catalogs) {
   if (!catalogProbeFinished) {
     console.log("Catalog probe still in progress; may fetch older versioned data.");
   }
@@ -130,12 +170,55 @@ function getData(catalogs) {
     var name = new Name(Config.defaultPrefix + username + Config.dataPrefix);
     for (catalog in catalogs[username]) {
       for (dataItem in catalogs[username][catalog].content) {
-        var interest = new Interest(new Name(name).appendTimestamp(catalogs[username][catalog].content[dataItem]));
+        var isoTimeString = Schedule.toIsoString(catalogs[username][catalog].content[dataItem] * 1000);
+        var interest = new Interest(new Name(name).append("SAMPLE").append(isoTimeString));
         interest.setInterestLifetimeMilliseconds(Config.defaultInterestLifetime);
         face.expressInterest(interest, onAppData, onAppDataTimeout);
       }
     }
   }
+}
+
+// For encrypted data
+function getEncryptedData(catalogs) {
+  if (!catalogProbeFinished) {
+    console.log("Catalog probe still in progress; may fetch older versioned data.");
+  }
+  for (username in catalogs) {
+    var name = new Name(Config.defaultPrefix + username + Config.dataPrefix);
+    for (catalog in catalogs[username]) {
+      for (dataItem in catalogs[username][catalog].content) {
+        var isoTimeString = Schedule.toIsoString(catalogs[username][catalog].content[dataItem] * 1000);
+        var interest = new Interest(new Name(name).append("SAMPLE").append(isoTimeString));
+        // TODO: user consumer.consume
+      }
+    }
+  }
+}
+
+function requestDataAccess(username) {
+  if (certBase64String == "") {
+    console.log("Cert not yet generated!");
+    return;
+  }
+  if (username == undefined) {
+    username = Config.defaultUsername;
+  }
+  var name = new Name(Config.defaultPrefix).append(new Name(username)).append(new Name("read_access_request")).append(new Name(certificateName));
+  var interest = new Interest(name);
+  //interest.setInterestLifetimeMilliseconds(Config.defaultInterestLifetime);
+  interest.setMustBeFresh(true);
+
+  console.log("Express name " + name.toUri());
+  face.expressInterest(interest, onCatalogData, onCatalogTimeout);
+}
+
+function onAccessRequestData(interest, data) {
+  console.log("access request data received: " + data.getName().toUri());
+}
+
+function onAccessRequestTimeout(interest) {
+  console.log("access request " + interest.getName().toUri() + " times out!");
 }
 
 function formatTime(unixTimestamp) {
