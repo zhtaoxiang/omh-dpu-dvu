@@ -41,8 +41,8 @@ class SampleProducer(object):
             pass
 
         self.testDb = Sqlite3ProducerDb(self.databaseFilePath)
-        prefix = Name(username).append(Name("data/fitness/physical_activity/time_location"))
-        suffix = Name()
+        prefix = Name(username)
+        suffix = Name("fitness/physical_activity/time_location")
 
         self.producer = Producer(prefix, suffix, self.face, self.keyChain, self.testDb)
 
@@ -50,7 +50,13 @@ class SampleProducer(object):
         return
 
     def createContentKey(self, timeSlot):
-        contentKeyName = self.producer.createContentKey(timeSlot, self.onEncryptedKeys)
+        print "debug: createContentKey"
+        contentKeyName = self.producer.createContentKey(timeSlot, self.onEncryptedKeys, self.onError)
+        print contentKeyName.toUri()
+
+    def onError(self, code, msg):
+        print str(code) + " : " + msg
+        return
 
     def initiateContentStoreInsertion(self, repoCommandPrefix, data):
         fetchName = data.getName()
@@ -68,15 +74,15 @@ class SampleProducer(object):
         self.face.expressInterest(interest, self.onRepoData, self.onRepoTimeout)
 
     def onRepoData(self, interest, data):
-        print "received repo data: " + interest.getName().toUri()
+        #print "received repo data: " + interest.getName().toUri()
         return
 
     def onRepoTimeout(self, interest):
-        print "repo command times out: " + interest.getName().toUri()
+        #print "repo command times out: " + interest.getName().getPrefix(-1).toUri()
         return
 
     def onEncryptedKeys(self, keys):
-        print "onEncryptedKeys called"
+        print "debug: onEncryptedKeys called"
         if not keys:
             print "onEncryptedKeys: no keys in callback!"
         for i in range(0, len(keys)):
@@ -127,10 +133,8 @@ if __name__ == "__main__":
         timeFloat = Schedule.fromIsoString(timeString)
 
         dataObject = json.dumps({"lat": baseLat + random.randint(-10, 10), "timestamp": int(timeFloat / 1000), "lng": baseLng + random.randint(-10, 10)})
-        print timeFloat
         testProducer.producer.produce(emptyData, timeFloat, Blob(dataObject, False))
         producedName = emptyData.getName()
-        print "Produced name: " + producedName.toUri() + "; Produced content: " + str(dataObject)
         memoryContentCache.add(emptyData)
 
         # Insert content into repo-ng
@@ -139,7 +143,6 @@ if __name__ == "__main__":
 
     catalogData.setContent(json.dumps(catalogContentArray))
     testProducer.keyChain.sign(catalogData)
-    print "Produced name: " + producedName.toUri() + "; Produced content: " + str(catalogContentArray)
     testProducer.initiateContentStoreInsertion(repoPrefix, catalogData)
     memoryContentCache.add(catalogData)
 
@@ -155,10 +158,9 @@ if __name__ == "__main__":
         timeFloat = Schedule.fromIsoString(timeString)
 
         dataObject = json.dumps({"lat": baseLat + random.randint(-10, 10), "timestamp": int(timeFloat / 1000), "lng": baseLng + random.randint(-10, 10)})
-        unencryptedData = Data(Name(unencryptedUserName).append(Name("/data/fitness/physical_activity/time_location/SAMPLE")).append(timeString))
+        unencryptedData = Data(Name(unencryptedUserName).append(Name("/SAMPLE/fitness/physical_activity/time_location/")).append(timeString))
         unencryptedData.setContent(dataObject)
         testProducer.keyChain.sign(unencryptedData)
-        print "Produced name: " + unencryptedData.getName().toUri() + "; Produced content: " + str(dataObject)
 
         # Insert content into repo-ng
         testProducer.initiateContentStoreInsertion("/ndn/edu/ucla/remap/ndnfit/repo", unencryptedData)
@@ -170,7 +172,6 @@ if __name__ == "__main__":
     # Insert catalog into repo-ng
     catalogData.setContent(json.dumps(catalogContentArray))
     testProducer.keyChain.sign(catalogData)
-    print "Produced name: " + catalogData.getName().toUri() + "; Produced content: " + str(catalogContentArray)
     testProducer.initiateContentStoreInsertion(repoPrefix, catalogData)
     memoryContentCache.add(catalogData)
 

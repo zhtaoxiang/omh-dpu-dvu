@@ -18,11 +18,13 @@ var Config = {
   defaultUsername: "haitao",
   defaultPrefix: "/org/openmhealth/",
   catalogPrefix: "/data/fitness/physical_activity/time_location/catalog/",
-  dataPrefix: "/data/fitness/physical_activity/time_location/",
+  dataPrefix: "/fitness/physical_activity/time_location/",
   defaultInterestLifetime: 1000,
 
   // not a reliable way for determining if catalog probe has finished
-  catalogTimeoutThreshold: 1
+  catalogTimeoutThreshold: 1,
+  lngOffset: 160,
+  lngTimes: 4
 }
 
 var face = new Face({host: Config.hostName, port: Config.wsPort});
@@ -51,7 +53,8 @@ var certificateName = undefined;
 
 // For now, hard-coded group name
 var groupName = new Name("/org/openmhealth/zhehao");
-var consumerDb = new IndexedDbConsumerDb();
+indexedDB.deleteDatabase("consumer-db")
+var consumerDb = new IndexedDbConsumerDb("consumer-db");
 var nacConsumer = new Consumer(face, keyChain, groupName, consumerIdentityName, consumerDb);
 
 this.keyChain.createIdentityAndCertificate(consumerIdentityName, function(myCertificateName) {
@@ -78,7 +81,16 @@ function getPrivateKeyAndInsertPromise(privateKeyDb, keyName, consumerDb) {
     (IndexedDbPrivateKeyStorage.transformName(keyName))
   .then(function(privateKeyEntry) {
     console.log(privateKeyEntry);
-    return consumerDb.addKeyPromise(keyName, privateKeyEntry.encoding);
+    console.log(keyName.toUri());
+    function onComplete() {
+      console.log("add key complete");
+    }
+    function onError(msg) {
+      console.log("add key error: " + msg);
+    }
+    //consumer.addDecryptionKey(keyName, new Blob(privateKeyEntry.encoding), onComplete, onError);
+    //return consumerDb.addKeyPromise(keyName, new Blob(privateKeyEntry.encoding));
+    return Promise.resolve(consumerDb.addKeyPromise(keyName, new Blob(privateKeyEntry.encoding)));
   })
 }
 
@@ -185,11 +197,11 @@ function getUnencryptedData(catalogs) {
     console.log("Catalog probe still in progress; may fetch older versioned data.");
   }
   for (username in catalogs) {
-    var name = new Name(Config.defaultPrefix + username + Config.dataPrefix);
+    var name = new Name(Config.defaultPrefix + username).append(new Name("SAMPLE")).append(new Name(Config.dataPrefix));
     for (catalog in catalogs[username]) {
       for (dataItem in catalogs[username][catalog].content) {
         var isoTimeString = Schedule.toIsoString(catalogs[username][catalog].content[dataItem] * 1000);
-        var interest = new Interest(new Name(name).append("SAMPLE").append(isoTimeString));
+        var interest = new Interest(new Name(name).append(isoTimeString));
         interest.setInterestLifetimeMilliseconds(Config.defaultInterestLifetime);
         face.expressInterest(interest, onAppData, onAppDataTimeout);
       }
@@ -203,12 +215,12 @@ function getEncryptedData(catalogs) {
     console.log("Catalog probe still in progress; may fetch older versioned data.");
   }
   for (username in catalogs) {
-    var name = new Name(Config.defaultPrefix + username + Config.dataPrefix);
+    var name = new Name(Config.defaultPrefix + username).append(new Name("SAMPLE")).append(new Name(Config.dataPrefix));
     for (catalog in catalogs[username]) {
       for (dataItem in catalogs[username][catalog].content) {
         var isoTimeString = Schedule.toIsoString(catalogs[username][catalog].content[dataItem] * 1000);
         var isoTimeString = Schedule.toIsoString(catalogs[username][catalog].content[dataItem] * 1000);
-        nacConsumer.consume(new Name(name).append("SAMPLE").append(isoTimeString), onConsumeComplete, onConsumeFailed);
+        nacConsumer.consume(new Name(name).append(isoTimeString), onConsumeComplete, onConsumeFailed);
       }
     }
   }
@@ -305,6 +317,10 @@ var onAppData = function (interest, data) {
   for (var i = 0; i < content.length; i++) {
     document.getElementById("content").innerHTML += formatTime(content[i].timeStamp) + "  " + JSON.stringify(content[i]) + "<br>";
   }
+
+  var canvas = document.getElementById("plotCanvas");
+  var ctx = canvas.getContext("2d");
+  ctx.fillRect(content.lat * Config.lngTimes, (content.lng + Config.lngOffset) * Config.lngTimes, 2, 2);
 }
 
 var onAppDataTimeout = function (interest) {
@@ -316,17 +332,32 @@ function issueDPUInterest(username) {
   if (username == undefined) {
     username = Config.defaultUsername;
   }
-  var name = new Name(Config.defaultPrefix).append(new Name(username)).append(new Name("data/fitness/physical_activity/genericfunctions/bounding_box/20160320T080030"));
+  var name = new Name(Config.defaultPrefix).append(new Name(username)).append(new Name("SAMPLE/fitness/physical_activity/genericfunctions/bounding_box/20160320T080000"));
+  // DistanceTo
+  //var name = new Name(Config.defaultPrefix).append(new Name(username)).append(new Name("data/fitness/physical_activity/genericfunctions/distanceTo/(100,100)/20160320T080030"));
   var interest = new Interest(name);
   interest.setMustBeFresh(true);
+  interest.setInterestLifetimeMilliseconds(10000);
 
-  console.log("Express name " + name.toUri());
-  face.expressInterest(interest, onDPUData, onDPUData);
+  face.expressInterest(interest, onDPUData, onDPUTimeout);
 }
 
 function onDPUData(interest, data) {
   console.log("onDPUData: " + data.getName().toUri());
-  console.log(data.getContent());
+  var content = data.getContent().toString('binary');
+  var dpuObject = JSON.parse(content);
+
+  var canvas = document.getElementById("plotCanvas");
+  var ctx = canvas.getContext("2d");
+  ctx.beginPath();
+  ctx.moveTo(dpuObject.minlat * Config.lngTimes, (dpuObject.minlng + Config.lngOffset) * Config.lngTimes);
+  ctx.lineTo(dpuObject.minlat * Config.lngTimes, (dpuObject.maxlng + Config.lngOffset) * Config.lngTimes);
+
+  ctx.lineTo(dpuObject.maxlat * Config.lngTimes, (dpuObject.maxlng + Config.lngOffset) * Config.lngTimes);
+  ctx.lineTo(dpuObject.maxlat * Config.lngTimes, (dpuObject.minlng + Config.lngOffset) * Config.lngTimes);
+  ctx.lineTo(dpuObject.minlat * Config.lngTimes, (dpuObject.minlng + Config.lngOffset) * Config.lngTimes);
+  ctx.strokeStyle = '#ff0000';
+  ctx.stroke();
 }
 
 function onDPUTimeout(interest) {

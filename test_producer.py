@@ -89,7 +89,7 @@ if __name__ == "__main__":
 
     testProducer = DPUProducer(face, identityName, prefix, suffix, databaseFilePath)
 
-    testTime1 = Schedule.fromIsoString("20150825T080000")
+    testTime1 = Schedule.fromIsoString("20160320T080000")
     testProducer.createContentKey(testTime1)
     testProducer.produce(testTime1, DATA_CONTENT)
     print "Produced"
