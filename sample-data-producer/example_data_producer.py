@@ -136,6 +136,7 @@ if __name__ == "__main__":
         testProducer.producer.produce(emptyData, timeFloat, Blob(dataObject, False))
         producedName = emptyData.getName()
         memoryContentCache.add(emptyData)
+        print "Produced " + emptyData.getName().toUri()
 
         # Insert content into repo-ng
         testProducer.initiateContentStoreInsertion(repoPrefix, emptyData)

@@ -10,7 +10,8 @@
   <script type="text/javascript">
     catalogProbeFinishedCallback = function (catalogs) {
       var username = document.getElementById("userInput").value;
-      if (username != "" && username != undefined && username == "zhehao") {
+      var fetchEncrypted = document.getElementById("fetchEncrypted").checked;
+      if (fetchEncrypted) {
         getEncryptedData(catalogs);
       } else {
         getUnencryptedData(catalogs);
@@ -90,6 +91,7 @@
 <body>
   <input id="userInput" type="text"></input> <br>
 
+  <input id="fetchEncrypted" type="checkbox">Fetch encrypted</input> <br>
   <button id="userBtn" onclick="getUsers()">Scan users</button> <br>
   <button id="catalogBtn" onclick="getCatalogsClick()">Get data</button> <br>
   <button id="dpuBtn" onclick="issueDPUInterestClick()">Call DPU (Bounding box)</button> <br>

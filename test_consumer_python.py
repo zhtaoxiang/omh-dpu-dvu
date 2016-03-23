@@ -10,6 +10,9 @@ from pyndn.security.identity import IdentityManager
 from pyndn.security.identity import BasicIdentityStorage, FilePrivateKeyStorage
 from pyndn.security.policy import NoVerifyPolicyManager
 
+# Group manager first, consumer second, after group manager publishes E-Key (which should happen after addMember), 
+# start producer, after producer creates C-key, run consumer again
+
 class TestConsumer(object):
     def __init__(self, face):
         # Set up face
@@ -30,7 +33,11 @@ class TestConsumer(object):
         self.keyChain = KeyChain(
           IdentityManager(identityStorage, privateKeyStorage),
           NoVerifyPolicyManager())
-        identityName = Name("/org/openmhealth/dvu-python-2")
+        # Authorized identity
+        identityName = Name("/org/openmhealth/dvu-python-3")
+        # Unauthorized identity
+        #identityName = Name("/org/openmhealth/dvu-python-1")
+        
         self.certificateName = self.keyChain.createIdentityAndCertificate(identityName)
 
         self.face.setCommandSigningInfo(self.keyChain, self.certificateName)
@@ -38,7 +45,7 @@ class TestConsumer(object):
         consumerKeyName = IdentityCertificate.certificateNameToPublicKeyName(self.certificateName)
         consumerCertificate = identityStorage.getCertificate(self.certificateName, True)
         self.consumer = Consumer(
-          face, self.keyChain, self.groupName, consumerKeyName,
+          face, self.keyChain, self.groupName, identityName,
           Sqlite3ConsumerDb(self.databaseFilePath))
 
         # TODO: Read the private key to decrypt d-key...this may or may not be ideal
@@ -52,17 +59,41 @@ class TestConsumer(object):
         self.memoryContentCache.registerPrefix(identityName, self.onRegisterFailed, self.onDataNotFound)
         self.memoryContentCache.add(consumerCertificate)
 
-        accessRequestInterest = Interest(Name(identityName).append("read_access_request").append(self.certificateName))
-        self.face.expressInterest(identityName, accessRequestInterest)
-        print "Consumer certificate name: " + self.certificateName.toUri()
+        accessRequestInterest = Interest(Name(self.groupName).append("read_access_request").append(self.certificateName))
+        self.face.expressInterest(accessRequestInterest, self.onAccessRequestData, self.onAccessRequestTimeout)
+        print "Access request interest name: " + accessRequestInterest.getName().toUri()
         return
+
+    def onAccessRequestData(self, interest, data):
+        print "Access request data: " + data.getName().toUri()
+        return
+
+    def onAccessRequestTimeout(self, interest):
+        print "Access request times out: " + interest.getName().toUri()
+        print "Assuming certificate sent and D-key generated"
+        self.startConsuming()
+        return
+
+    def startConsuming(self):
+        contentName = Name("/org/openmhealth/zhehao/SAMPLE/fitness/physical_activity/time_location/")
+        dataNum = 60
+        baseZFill = 3
+        basetimeString = "20160320T080"
+
+        for i in range(0, dataNum):
+            timeString = basetimeString + str(i).zfill(baseZFill)
+            timeFloat = Schedule.fromIsoString(timeString)
+
+            self.consume(Name(contentName).append(timeString))
+            print "Trying to consume: " + Name(contentName).append(timeString).toUri()
+
 
     def onDataNotFound(self, prefix, interest, face, interestFilterId, filter):
         print "Data not found for interest: " + interest.getName().toUri()
         return
 
     def onRegisterFailed(self, prefix):
-        print "Prefix registration failed"
+        print "Prefix registration failed: " + prefix.toUri()
         return
 
     def consume(self, contentName):
@@ -70,6 +101,7 @@ class TestConsumer(object):
 
     def onConsumeComplete(self, data, result):
         print "Consume complete for data name: " + data.getName().toUri()
+        print result
         
         # Test the length of encrypted data
 
@@ -79,12 +111,6 @@ class TestConsumer(object):
         # encryptedData = dataContent.getPayload()
         # print len(encryptedData)
 
-        if result.equals(Blob(DATA_CONTENT, False)):
-            print "Got expected content"
-        else:
-            print "Didn't get expected content"
-        return
-
     def onConsumeFailed(self, code, message):
         print "Consume error " + str(code) + ": " + message
 
@@ -92,18 +118,6 @@ if __name__ == "__main__":
     print "Start NAC consumer test"
     face = Face()
     testConsumer = TestConsumer(face)
-    contentName = Name("/org/openmhealth/zhehao/SAMPLE/fitness/physical_activity/time_location/")
-
-    dataNum = 60
-    baseZFill = 3
-    basetimeString = "20160320T080"
-
-    for i in range(0, dataNum):
-        timeString = basetimeString + str(i).zfill(baseZFill)
-        timeFloat = Schedule.fromIsoString(timeString)
-
-        testConsumer.consume(Name(contentName).append(timeString))
-        print "Trying to consume: " + Name(contentName).append(timeString).toUri()
 
     while True:
         face.processEvents()

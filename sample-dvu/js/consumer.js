@@ -15,7 +15,7 @@ var Exclude = require('ndn-js').Exclude;
 var Config = {
 	hostName: "localhost",
   wsPort: 9696,
-  defaultUsername: "haitao",
+  defaultUsername: "zhehao",
   defaultPrefix: "/org/openmhealth/",
   catalogPrefix: "/data/fitness/physical_activity/time_location/catalog/",
   dataPrefix: "/fitness/physical_activity/time_location/",
