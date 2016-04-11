@@ -39,7 +39,7 @@ class TestConsumer(object):
         #identityName = Name("/org/openmhealth/dvu-python-1")
         
         self.certificateName = self.keyChain.createIdentityAndCertificate(identityName)
-
+        
         self.face.setCommandSigningInfo(self.keyChain, self.certificateName)
 
         consumerKeyName = IdentityCertificate.certificateNameToPublicKeyName(self.certificateName)
@@ -52,6 +52,7 @@ class TestConsumer(object):
         base64Content = None
         with open(privateKeyStorage.nameTransform(consumerKeyName.toUri(), ".pri")) as keyFile:
             base64Content = keyFile.read()
+            #print base64Content
         der = Blob(base64.b64decode(base64Content), False)
         self.consumer.addDecryptionKey(consumerKeyName, der)
 
