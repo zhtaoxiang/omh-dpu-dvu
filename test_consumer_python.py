@@ -51,6 +51,7 @@ class TestConsumer(object):
         # TODO: Read the private key to decrypt d-key...this may or may not be ideal
         base64Content = None
         with open(privateKeyStorage.nameTransform(consumerKeyName.toUri(), ".pri")) as keyFile:
+            print privateKeyStorage.nameTransform(consumerKeyName.toUri(), ".pri")
             base64Content = keyFile.read()
             #print base64Content
         der = Blob(base64.b64decode(base64Content), False)
