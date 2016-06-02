@@ -13,8 +13,8 @@ from pyndn.security.policy import NoVerifyPolicyManager
 import trollius as asyncio
 from pyndn.encoding import ProtobufTlv
 
-import producer.repo_command_parameter_pb2
-import producer.repo_command_response_pb2
+import producer.repo_command_parameter_pb2 as repo_command_parameter_pb2
+import producer.repo_command_response_pb2 as repo_command_response_pb2
 
 DATA_CONTENT = bytearray([
     0xcb, 0xe5, 0x6a, 0x80, 0x41, 0x24, 0x58, 0x23,
@@ -153,7 +153,7 @@ if __name__ == "__main__":
     testGroupManager = TestGroupManager(face, groupManagerName, dataType, readAccessName, "policy_config/manager-d-key-test.db")
     testGroupManager.setManager()
 
-    #testGroupManager.publishGroupKeys()
+    testGroupManager.publishGroupKeys()
     
     while True:
         face.processEvents()

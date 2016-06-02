@@ -34,7 +34,7 @@ class TestConsumer(object):
           IdentityManager(identityStorage, privateKeyStorage),
           NoVerifyPolicyManager())
         # Authorized identity
-        identityName = Name("/org/openmhealth/dvu-python-3")
+        identityName = Name("/org/openmhealth/dvu-python-7")
         # Unauthorized identity
         #identityName = Name("/org/openmhealth/dvu-python-1")
         
@@ -43,7 +43,7 @@ class TestConsumer(object):
         self.face.setCommandSigningInfo(self.keyChain, self.certificateName)
 
         consumerKeyName = IdentityCertificate.certificateNameToPublicKeyName(self.certificateName)
-        consumerCertificate = identityStorage.getCertificate(self.certificateName, True)
+        consumerCertificate = identityStorage.getCertificate(self.certificateName)
         self.consumer = Consumer(
           face, self.keyChain, self.groupName, identityName,
           Sqlite3ConsumerDb(self.databaseFilePath))

@@ -1,0 +1,106 @@
+<html xmlns = "http://www.w3.org/1999/xhtml">
+<meta charset="UTF-8">
+
+<head>
+  <title>NDNFit Consumer Webpage</title>
+
+  <script type="text/javascript" src="js/ndn-js.min.js"></script>
+  <script type="text/javascript" src="js/consumer.js"></script>
+  
+  <script type="text/javascript">
+    catalogProbeFinishedCallback = function (catalogs) {
+      var username = document.getElementById("userInput").value;
+      var fetchEncrypted = document.getElementById("fetchEncrypted").checked;
+      if (fetchEncrypted) {
+        getEncryptedData(catalogs);
+      } else {
+        getUnencryptedData(catalogs);
+      }
+    }
+
+    function getCatalogsClick() {
+      var username = document.getElementById("userInput").value;
+      if (username != "" && username != undefined) {
+        getCatalogs(username);
+      } else {
+        getCatalogs();
+      }
+    }
+
+    function requestDataAccessClick() {
+      var username = document.getElementById("userInput").value;
+      if (username != "" && username != undefined) {
+        requestDataAccess(username);
+      } else {
+        requestDataAccess();
+      }
+    }
+
+    function issueDPUInterestClick() {
+      var username = document.getElementById("userInput").value;
+      if (username != "" && username != undefined) {
+        issueDPUInterest(username);
+      } else {
+        issueDPUInterest();
+      }
+    }
+
+    function issueDPUNFNInterestClick() {
+      var name = new Name("/NFN/basel/orgOpenmhealth_services_DistanceTo/(@x call 4 x 'haitao' 'point' '20160320T080030')/NFN");
+      var interest = new Interest(name);
+      interest.setMustBeFresh(true);
+      interest.setInterestLifetimeMilliseconds(10000);
+      face.expressInterest(interest, onDPUNFNData, onDPUNFNTimeout);
+    }
+
+    function issueDPUNDNInterestClick() {
+      // Calling NFN DPU
+      var name = new Name("/org/openmhealth/haitao/Data/fitness/physical_activity/genericfunction/TODO/PREFIX/DistanceTo/point/20160320T080030");
+      // DistanceTo
+      //var name = new Name(Config.defaultPrefix).append(new Name(username)).append(new Name("data/fitness/physical_activity/genericfunctions/distanceTo/(100,100)/20160320T080030"));
+      var interest = new Interest(name);
+      interest.setMustBeFresh(true);
+      interest.setInterestLifetimeMilliseconds(10000);
+      face.expressInterest(interest, onDPUNDNData, onDPUNFNTimeout);
+      console.log("expressInterest " + interest.getName().toUri());
+    }
+
+    function onDPUNDNData(interest, data) {
+      // This is not encapsulated
+      console.log("onDPU NDN data: " + data.getName().toUri());
+      
+    }
+
+    function onDPUNFNData(interest, data) {
+      // This is encapsulated
+      console.log(data.getContent());
+      console.log("onDPU NFN data: " + data.getName().toUri());
+      newData = new Data();
+      newData.wireDecode(data.getContent());
+      console.log("onDPU NFN data: " + newData.getName().toUri());
+      console.log(newData.getContent().toString('binary'));
+      document.getElementById("content").innerHTML += "NFN replied with encapsulated data; outer name: " + data.getName().toUri() + " inner name: " + newData.getName().toUri() + " ; content: " + newData.getContent().toString('binary') + "<br>";
+    }
+
+    function onDPUNFNTimeout(interest) {
+      console.log("DPU NFN interest times out: " + interest.getName().toUri());
+    }
+  </script>
+</head>
+
+<body>
+  <input id="userInput" type="text"></input> <br>
+
+  <input id="fetchEncrypted" type="checkbox">Fetch encrypted</input> <br>
+  <button id="userBtn" onclick="getUsers()">Scan users</button> <br>
+  <button id="catalogBtn" onclick="getCatalogsClick()">Get data</button> <br>
+  <button id="dpuBtn" onclick="issueDPUInterestClick()">Call DPU (Bounding box)</button> <br>
+  <button id="dpuBtn" onclick="issueDPUNFNInterestClick()">Call DPU (Distance To, NFN)</button> <br>
+  <button id="dpuBtn" onclick="issueDPUNDNInterestClick()">Call DPU (Distance To, NDN)</button> <br>
+  <button id="dpuBtn" onclick="requestDataAccessClick()">Request data access</button> <br>
+  <p id="content">Content: <br/></p> <br>
+
+  <canvas id="plotCanvas" width="400" height="400"></canvas>
+</body>
+
+<html>
