@@ -256,7 +256,6 @@ function onConsumeComplete(data, result) {
 
 function onConsumeFailed(code, message) {
   console.log("Consume failed: " + code + " : " + message);
-  logString("<b>Data</b>: " + data.getName().toUri() + " <br>");
   logString("<b style=\"color:red\">Consume failed:</b>" + code + " : " + message + "<br>");
 }
 

@@ -65,7 +65,9 @@ class TestGroupManager(object):
         certInterest.setName(certInterest.getName().getPrefix(-1))
         certInterest.setInterestLifetimeMilliseconds(2000)
 
-        self.face.expressInterest(certInterest, lambda memberInterest, memberData: self.onMemberCertificateData(memberInterest, memberData, interest), self.onMemberCertificateTimeout);
+        self.face.expressInterest(certInterest, 
+          lambda memberInterest, memberData: self.onMemberCertificateData(memberInterest, memberData, interest), 
+          lambda memberInterest: self.onMemberCertificateTimeout(memberInterest, interest) );
         print "Retrieving member certificate: " + certInterest.getName().toUri()
 
         return
@@ -101,11 +103,13 @@ class TestGroupManager(object):
         accessResponse.setContent("granted")
         self.face.putData(accessResponse)
 
-    def onMemberCertificateTimeout(self, interest):
+    def onMemberCertificateTimeout(self, interest, accessInterest):
         print "Member certificate interest times out: " + interest.getName().toUri()
         newInterest = Interest(interest)
         newInterest.refreshNonce()
-        self.face.expressInterest(newInterest, self.onMemberCertificateData, self.onMemberCertificateTimeout)
+        self.face.expressInterest(newInterest, 
+          lambda memberInterest, memberData: self.onMemberCertificateData(memberInterest, memberData, accessInterest), 
+          lambda memberInterest: self.onMemberCertificateTimeout(memberInterest, accessInterest))
         return
 
     def publishGroupKeys(self):
