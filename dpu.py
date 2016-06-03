@@ -1,284 +1,190 @@
-import os, time, json, base64, sys, math, getopt
-from pyndn import Name, Data, Face, Interest, Exclude
+import unittest as ut
+import os, time, base64, re, json
+from pyndn import Name, Data, Face, Interest
 from pyndn.util import Blob, MemoryContentCache
 from pyndn.encrypt import Schedule, Consumer, Sqlite3ConsumerDb, EncryptedContent
 
 from pyndn.security import KeyType, KeyChain, RsaKeyParams
 from pyndn.security.certificate import IdentityCertificate
 from pyndn.security.identity import IdentityManager
-from pyndn.security.identity import BasicIdentityStorage, FilePrivateKeyStorage
+from pyndn.security.identity import BasicIdentityStorage, FilePrivateKeyStorage, MemoryIdentityStorage, MemoryPrivateKeyStorage
 from pyndn.security.policy import NoVerifyPolicyManager
 
-from test_consumer import DPUConsumer
-from test_producer import DPUProducer
+import producer.repo_command_parameter_pb2 as repo_command_parameter_pb2
+import producer.repo_command_response_pb2 as repo_command_response_pb2
+from pyndn.encoding import ProtobufTlv
 
-# TODO: production logic (when to trigger data production's not handled properly, in case of decryption failure)
-
-class DPU(object):
-    def __init__(self, face, identityName, groupName, catalogPrefix, rawDataPrefix, producerDbFilePath, consumerDbFilePath, encrypted = False):
+class TestConsumer(object):
+    def __init__(self, face):
+        # Set up face
         self.face = face
+
+        self.databaseFilePath = "policy_config/test_consumer_dpu.db"
+        try:
+            os.remove(self.databaseFilePath)
+        except OSError:
+            # no such file
+            pass
+
+        self.groupName = Name("/org/openmhealth/zhehao")
+
         # Set up the keyChain.
         identityStorage = BasicIdentityStorage()
         privateKeyStorage = FilePrivateKeyStorage()
         self.keyChain = KeyChain(
           IdentityManager(identityStorage, privateKeyStorage),
           NoVerifyPolicyManager())
-        self.identityName = Name(identityName)
-        self.groupName = Name(groupName)
-        self.rawDataPrefix = rawDataPrefix
-        self.catalogPrefix = catalogPrefix
-
-        self.certificateName = self.keyChain.createIdentityAndCertificate(self.identityName)
+        # Authorized identity
+        identityName = Name("/ndn/edu/ucla/remap/dpu")
+        # Function name: the function that this DPU provides
+        self._functionName = "bounding_box"
+        self._identityName = identityName
+        
+        self.certificateName = self.keyChain.createIdentityAndCertificate(identityName)
+        # TODO: if using BasicIdentityStorage and FilePrivateKeyStorage
+        #   For some reason this newly generated cert is not installed by default, calling keyChain sign later would result in error
+        #self.keyChain.installIdentityCertificate()
+        
         self.face.setCommandSigningInfo(self.keyChain, self.certificateName)
 
-        # Set up the memoryContentCache
-        self.memoryContentCache = MemoryContentCache(self.face)
-        self.memoryContentCache.registerPrefix(self.identityName, self.onRegisterFailed, self.onDataNotFound)
-
-        self.producerPrefix = Name(identityName)
-        self.producerSuffix = Name()
-
-        self.producer = DPUProducer(face, self.memoryContentCache, self.producerPrefix, self.producerSuffix, self.keyChain, self.certificateName, producerDbFilePath)
-        
-        # Put own (consumer) certificate in memoryContentCache
         consumerKeyName = IdentityCertificate.certificateNameToPublicKeyName(self.certificateName)
-        consumerCertificate = identityStorage.getCertificate(self.certificateName, True)
-
-        # TODO: request that this DPU be added as a trusted group member
-
-
-        self.remainingTasks = dict()
-
-        try:
-            os.remove(consumerDbFilePath)
-        except OSError:
-            # no such file
-            pass
-        
+        consumerCertificate = identityStorage.getCertificate(self.certificateName)
         self.consumer = Consumer(
-          face, self.keyChain, self.groupName, consumerKeyName,
-          Sqlite3ConsumerDb(consumerDbFilePath))
+          face, self.keyChain, self.groupName, identityName,
+          Sqlite3ConsumerDb(self.databaseFilePath))
 
         # TODO: Read the private key to decrypt d-key...this may or may not be ideal
         base64Content = None
         with open(privateKeyStorage.nameTransform(consumerKeyName.toUri(), ".pri")) as keyFile:
+            print privateKeyStorage.nameTransform(consumerKeyName.toUri(), ".pri")
             base64Content = keyFile.read()
+            #print base64Content
         der = Blob(base64.b64decode(base64Content), False)
         self.consumer.addDecryptionKey(consumerKeyName, der)
 
+        self.memoryContentCache = MemoryContentCache(self.face)
+        self.memoryContentCache.registerPrefix(identityName, self.onRegisterFailed, self.onDataNotFound)
         self.memoryContentCache.add(consumerCertificate)
 
-        self.encrypted = encrypted
+        accessRequestInterest = Interest(Name(self.groupName).append("read_access_request").append(self.certificateName))
+        self.face.expressInterest(accessRequestInterest, self.onAccessRequestData, self.onAccessRequestTimeout)
+        print "Access request interest name: " + accessRequestInterest.getName().toUri()
 
-        self.rawData = []
+        self._tasks = dict()
 
-        self.catalogFetchFinished = False
-        self.remainingData = 0
         return
+
+    def onAccessRequestData(self, interest, data):
+        print "Access request data: " + data.getName().toUri()
+        return
+
+    def onAccessRequestTimeout(self, interest):
+        print "Access request times out: " + interest.getName().toUri()
+        print "Assuming certificate sent and D-key generated"
+        return
+
+    def startConsuming(self, userId, basetimeString, producedDataName, dataNum, outerDataName):
+        contentName = Name(userId).append(Name("/SAMPLE/fitness/physical_activity/time_location/"))
+        baseZFill = 3
+
+        for i in range(0, dataNum):
+            timeString = basetimeString + str(i).zfill(baseZFill)
+            timeFloat = Schedule.fromIsoString(timeString)
+
+            self.consume(Name(contentName).append(timeString), producedDataName, outerDataName)
+            print "Trying to consume: " + Name(contentName).append(timeString).toUri()
 
     def onDataNotFound(self, prefix, interest, face, interestFilterId, filter):
         print "Data not found for interest: " + interest.getName().toUri()
-
-        if interest.getName().get(-3).toEscapedString() == "bout" or interest.getName().get(-3).toEscapedString() == "genericfunctions":
-            if interest.getName().toUri() in self.remainingTasks:
-                # We are already trying to process this task, so we don't add it to the list of tasks
-                pass
-            else:
-                self.remainingTasks[interest.getName().toUri()] = "in-progress";
+        functionComponentIdx = len(self._identityName)
+        if interest.getName().get(functionComponentIdx).toEscapedString() == self._functionName:
+            try:
+                parameters = interest.getName().get(functionComponentIdx + 1).toEscapedString()
+                pattern = re.compile('([^,]*),([^,]*),([^,]*)')
+                matching = pattern.match(str(Name.fromEscapedString(parameters)))
+                
+                userId = matching.group(1)
+                basetimeString = matching.group(2)
+                producedDataName = matching.group(3)
+                dataNum = 60
+                self._tasks[producedDataName] = {"cap_num": dataNum, "current_num": 0, "dataset": []}
+                self.startConsuming(userId, basetimeString, producedDataName, dataNum, interest.getName().toUri())
+            except Exception as e:
+                print "Exception in processing function arguments: " + str(e)
         else:
-            print "Got unexpected interest: " + interest.getName().toUri()
-
-        # .../SAMPLE/<timestamp>
-        timestamp = interest.getName().get(-1)
-        catalogInterest = Interest(self.catalogPrefix)
-
-        # Traverse catalogs in range from leftmost child
-        catalogInterest.setChildSelector(0)
-        catalogInterest.setMustBeFresh(True)
-        catalogInterest.setInterestLifetimeMilliseconds(4000)
-
-        exclude = Exclude()
-        exclude.appendAny()
-        exclude.appendComponent(timestamp)
-        catalogInterest.setExclude(catalogInterest)
-        self.face.expressInterest(catalogInterest, self.onCatalogData, self.onCatalogTimeout)
-        print "Expressed catalog interest " + catalogInterest.getName().toUri()
-
+            print "function name mismatch: expected " + self._functionName + " ; got " + interest.getName().get(functionComponentIdx).toEscapedString()
         return
 
     def onRegisterFailed(self, prefix):
-        print "Prefix registration failed"
+        print "Prefix registration failed: " + prefix.toUri()
         return
 
-    def onCatalogData(self, interest, data):
-        # Find the next catalog
-        print "Received catalog data " + data.getName().toUri()
+    def consume(self, contentName, producedDataName, outerDataName):
+        self.consumer.consume(contentName, lambda data, result: self.onConsumeComplete(data, result, producedDataName, outerDataName), self.onConsumeFailed)
 
-        catalogTimestamp = data.getName().get(-2)
-        exclude = Exclude()
-        exclude.appendAny()
-        exclude.appendComponent(catalogTimestamp)
+    def onConsumeComplete(self, data, result, producedDataName, outerDataName):
+        print "Consume complete for data name: " + data.getName().toUri()
 
-        nextCatalogInterest = Interest(interest.getName())
-        nextCatalogInterest.setExclude(exclude)
-        nextCatalogInterest.setChildSelector(0)
-        nextCatalogInterest.setMustBeFresh(True)
-        nextCatalogInterest.setInterestLifetimeMilliseconds(2000)
-        self.face.expressInterest(nextCatalogInterest, self.onCatalogData, self.onCatalogTimeout)
-        print "Expressed catalog interest " + nextCatalogInterest.getName().toUri()
+        if producedDataName in self._tasks:
+            self._tasks[producedDataName]["current_num"] += 1
+            self._tasks[producedDataName]["dataset"].append(result)
+            if self._tasks[producedDataName]["current_num"] == self._tasks[producedDataName]["cap_num"]:
+                maxLng = -1000
+                minLng = 1000
+                maxLat = -1000
+                minLat = 1000
+                for item in self._tasks[producedDataName]["dataset"]:
+                    dataObject = json.loads(str(item))
+                    if dataObject["lat"] > maxLat:
+                        maxLat = dataObject["lat"]
+                    if dataObject["lat"] < minLat:
+                        minLat = dataObject["lat"]
+                    if dataObject["lng"] > maxLng:
+                        maxLng = dataObject["lng"]
+                    if dataObject["lng"] < minLng:
+                        minLng = dataObject["lng"]
 
-        # We ignore the version in the catalog
-        if self.encrypted:
-            self.consumer.consume(contentName, self.onCatalogConsumeComplete, self.onConsumeFailed)
-        else:
-            self.onCatalogConsumeComplete(data, data.getContent())
+                innerData = Data(Name(str(producedDataName)))
+                innerData.setContent(json.dumps({"minLat": minLat, "maxLat": maxLat, "minLng": minLng, "maxLng": maxLng}))
+                #self.keyChain.sign(innerData)
 
-    def onCatalogConsumeComplete(self, data, result):
-        print "Consume complete for catalog name: " + data.getName().toUri()
-        catalog = json.loads(result.toRawStr())
-        
-        for timestamp in catalog:
-            # For encrypted data, timestamp format will have to change
-            rawDataName = Name(self.rawDataPrefix).append(Schedule.toIsoString(timestamp * 1000))
-            dataInterest = Interest(rawDataName)
-            dataInterest.setInterestLifetimeMilliseconds(2000)
-            dataInterest.setMustBeFresh(True)
-            self.face.expressInterest(dataInterest, self.onRawData, self.onRawDataTimeout)
-            self.remainingData += 1
-        return
+                outerData = Data(Name(str(outerDataName)))
+                outerData.setContent(innerData.wireEncode())
+                #self.keyChain.sign(outerData)
 
-    # TODO: This logic for checking 'if I have everything, and should proceed with all pending tasks' is not correct for the long run 
-    def onRawDataConsumeComplete(self, data, result):
-        resultObject = json.loads(result.toRawStr())
-        # TODO: the original data for timestamp should be an array
-        self.rawData.append(resultObject)
-
-        self.remainingData -= 1
-        print "Remaing data number: " + str(self.remainingData)
-
-        if self.remainingData == 0 and self.catalogFetchFinished:
-            self.produce()
-
-        # TODO: Unideal distanceTo production
-        for item in self.remainingTasks:
-            username = data.getName().get(2)
-            timestamp = Name(item).get(-1).toEscapedString()
-            if "distanceTo" in item and username in item and timestamp in data.getName().toUri():
-                # We want this distanceTo
-                destCoordinate = Name(item).get(-2).toEscapedString()
-                coordinates = destCoordinate[1:-1].split(",").strip()
-                x = int(coordinates[0])
-                y = int(coordinates[1])
-                dataObject = json.dumps({"distanceTo": math.sqrt((x - resultObject["lat"]) * (x - resultObject["lat"]) + (y - resultObject["lng"]) * (y - resultObject["lng"]))})
-                
-                data = Data(data)
-                data.getMetaInfo().setFreshnessPeriod(40000000000)
-                data.setContent(dataObject)
-                self.keyChain.sign(data)
-
-                # If the interest's still within lifetime, this will satisfy the interest
-                self.memoryContentCache.add(data)
-
-        return
+                self.memoryContentCache.add(outerData)
+                self.initiateContentStoreInsertion("/ndn/edu/ucla/remap/ndnfit/repo", outerData)
+                print "Calculation completed, put data to repo"
 
     def onConsumeFailed(self, code, message):
         print "Consume error " + str(code) + ": " + message
 
-    def onRawData(self, interest, data):
-        print "Raw data received: " + data.getName().toUri()
+    def initiateContentStoreInsertion(self, repoCommandPrefix, data):
+        fetchName = data.getName()
+        parameter = repo_command_parameter_pb2.RepoCommandParameterMessage()
+        # Add the Name.
+        for i in range(fetchName.size()):
+            parameter.repo_command_parameter.name.component.append(
+              fetchName[i].getValue().toBytes())
 
-        # TODO: Quick hack for deciding if the data is encrypted
-        if "zhehao" in data.getName().toUri():
-            self.consumer.consume(data.getName(), self.onRawDataConsumeComplete, self.onConsumeFailed)
-        else:
-            print "raw data consume complete"
-            self.onRawDataConsumeComplete(data, data.getContent())
+        # Create the command interest.
+        interest = Interest(Name(repoCommandPrefix).append("insert")
+          .append(Name.Component(ProtobufTlv.encode(parameter))))
+        self.face.makeCommandInterest(interest)
 
-        # if self.encrypted:
-        #     self.consumer.consume(data.getName(), self.onRawDataConsumeComplete, self.onConsumeFailed)
-        # else:
-        #     self.onRawDataConsumeComplete(data, data.getContent())
+        self.face.expressInterest(interest, self.onRepoData, self.onRepoTimeout)
 
-    def onCatalogTimeout(self, interest):
-        print "Catalog times out: " + interest.getName().toUri()
-        # TODO: 1 timeout would result in this dpu thinking that catalog fetching's done!
-
-        self.catalogFetchFinished = True
-        if self.remainingData == 0:
-            self.produce()
+    def onRepoData(self, interest, data):
+        #print "received repo data: " + interest.getName().toUri()
         return
 
-    def onRawDataTimeout(self, interest):
-        print "Raw data times out: " + interest.getName().toUri()
+    def onRepoTimeout(self, interest):
+        #print "repo command times out: " + interest.getName().getPrefix(-1).toUri()
         return
-
-    # TODO: This logic for checking 'if I have everything, and should proceed with all pending tasks' is not correct for the long run 
-    def produce(self):
-        # Produce the bounding box
-        print "ready to produce"
-        maxLong = -3600
-        minLong = 3600
-        maxLat = -3600
-        minLat = 3600
-
-        if len(self.rawData) == 0:
-            print "No raw data as producer input"
-
-        for item in self.rawData:
-            print item
-            if item["lng"] > maxLong:
-                maxLong = item["lng"]
-            if item["lng"] < minLong:
-                minLong = item["lng"]
-            if item["lat"] > maxLat:
-                maxLat = item["lat"]
-            if item["lat"] < minLat:
-                minLat = item["lat"]
-
-        result = json.dumps({
-            "maxlng": maxLong, 
-            "minlng": minLong, 
-            "maxlat": maxLat, 
-            "minlat": minLat, 
-            "size": len(self.rawData)
-        })
-
-        if self.encrypted:
-            # TODO: replace fixed timestamp for now for produced data, createContentKey as needed
-            testTime1 = Schedule.fromIsoString("20160320T080000")
-            self.producer.createContentKey(testTime1)
-            self.producer.produce(testTime1, result)
-        else:
-            # Arbitrary produced data lifetime
-            data = Data(Name(self.identityName).append("20160320T080000"))
-            data.getMetaInfo().setFreshnessPeriod(400000)
-            data.setContent(result)
-
-            # If the interest's still within lifetime, this will satisfy the interest
-            self.memoryContentCache.add(data)
-            print "Produced data with name " + data.getName().toUri()
-
 
 if __name__ == "__main__":
-    try:
-        opts, args = getopt.getopt(sys.argv[1:], "", ["name="])
-    except getopt.GetoptError as err:
-        print err
-        usage()
-        sys.exit(2)
-
-    defaultUsername = "haitao"
-    for o, a in opts:
-        if o == "--name":
-            defaultUsername = a
-
     face = Face()
-    identityName = Name("/org/openmhealth/" + defaultUsername + "/SAMPLE/fitness/physical_activity/genericfunctions/bounding_box")
-    groupName = Name("/org/openmhealth/" + defaultUsername + "/data/fitness")
-    rawDataPrefix = Name("/org/openmhealth/" + defaultUsername + "/SAMPLE/fitness/physical_activity/time_location/")
-    catalogPrefix = Name("/org/openmhealth/" + defaultUsername + "/data/fitness/physical_activity/time_location/catalog/")
-
-    dpu = DPU(face, identityName, groupName, catalogPrefix, rawDataPrefix, "policy_config/test_producer.db", "policy_config/test_consumer.db")
+    testConsumer = TestConsumer(face)
 
     while True:
         face.processEvents()

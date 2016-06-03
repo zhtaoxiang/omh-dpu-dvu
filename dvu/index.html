@@ -45,26 +45,6 @@
       }
     }
 
-    function issueDPUNFNInterestClick() {
-      var name = new Name("/NFN/basel/orgOpenmhealth_services_DistanceTo/(@x call 4 x 'haitao' 'point' '20160320T080030')/NFN");
-      var interest = new Interest(name);
-      interest.setMustBeFresh(true);
-      interest.setInterestLifetimeMilliseconds(10000);
-      face.expressInterest(interest, onDPUNFNData, onDPUNFNTimeout);
-    }
-
-    function issueDPUNDNInterestClick() {
-      // Calling NFN DPU
-      var name = new Name("/org/openmhealth/haitao/Data/fitness/physical_activity/genericfunction/TODO/PREFIX/DistanceTo/point/20160320T080030");
-      // DistanceTo
-      //var name = new Name(Config.defaultPrefix).append(new Name(username)).append(new Name("data/fitness/physical_activity/genericfunctions/distanceTo/(100,100)/20160320T080030"));
-      var interest = new Interest(name);
-      interest.setMustBeFresh(true);
-      interest.setInterestLifetimeMilliseconds(10000);
-      face.expressInterest(interest, onDPUNDNData, onDPUNFNTimeout);
-      console.log("expressInterest " + interest.getName().toUri());
-    }
-
     function onDPUNDNData(interest, data) {
       // This is not encapsulated
       console.log("onDPU NDN data: " + data.getName().toUri());
@@ -95,8 +75,6 @@
   <button id="userBtn" onclick="getUsers()">Scan users</button> <br>
   <button id="catalogBtn" onclick="getCatalogsClick()">Get data</button> <br>
   <button id="dpuBtn" onclick="issueDPUInterestClick()">Call DPU (Bounding box)</button> <br>
-  <button id="dpuBtn" onclick="issueDPUNFNInterestClick()">Call DPU (Distance To, NFN)</button> <br>
-  <button id="dpuBtn" onclick="issueDPUNDNInterestClick()">Call DPU (Distance To, NDN)</button> <br>
   <button id="dpuBtn" onclick="requestDataAccessClick()">Request data access</button> <br>
   <p id="content">Content: <br/></p> <br>
 

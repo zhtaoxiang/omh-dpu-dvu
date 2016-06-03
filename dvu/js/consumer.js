@@ -334,7 +334,10 @@ function issueDPUInterest(username) {
   if (username == undefined) {
     username = Config.defaultUsername;
   }
-  var name = new Name(Config.defaultPrefix).append(new Name(username)).append(new Name("SAMPLE/fitness/physical_activity/genericfunctions/bounding_box/20160320T080000"));
+
+  var parameters = Name.fromEscapedString("/org/openmhealth/zhehao,20160320T080,/org/openmhealth/zhehao");
+  console.log(parameters);
+  var name = new Name("/ndn/edu/ucla/remap/dpu/bounding_box").append(parameters);
   // DistanceTo
   //var name = new Name(Config.defaultPrefix).append(new Name(username)).append(new Name("data/fitness/physical_activity/genericfunctions/distanceTo/(100,100)/20160320T080030"));
   var interest = new Interest(name);
@@ -342,12 +345,17 @@ function issueDPUInterest(username) {
   interest.setInterestLifetimeMilliseconds(10000);
 
   face.expressInterest(interest, onDPUData, onDPUTimeout);
+  console.log("Interest expressed: " + interest.getName().toUri());
 }
 
 function onDPUData(interest, data) {
   console.log("onDPUData: " + data.getName().toUri());
-  var content = data.getContent().toString('binary');
+  var innerData = new Data();
+  innerData.wireDecode(data.getContent());
+
+  var content = innerData.getContent().toString('binary');
   var dpuObject = JSON.parse(content);
+  console.log(dpuObject);
 
   var canvas = document.getElementById("plotCanvas");
   var ctx = canvas.getContext("2d");
