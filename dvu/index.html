@@ -3,10 +3,14 @@
 
 <head>
   <title>NDNFit Consumer Webpage</title>
-
-  <script type="text/javascript" src="js/ndn-js.min.js"></script>
-  <script type="text/javascript" src="js/consumer.js"></script>
+  <link rel="stylesheet" href="treeview.min.css" />
   <link rel="stylesheet" type="text/css" href="styles.css"/>
+
+  <script type="text/javascript" src="js/treeview.min.js"></script>  
+  <script type="text/javascript" src="js/ndn-js.min.js"></script>
+
+  <script type="text/javascript" src="js/consumer.js"></script>
+  <script type="text/javascript" src="js/tree.js"></script>
   
   <script type="text/javascript">
     catalogProbeFinishedCallback = function (catalogs) {
@@ -97,10 +101,12 @@
       <span>2D location data bounding box visualization:</span><br>
       <canvas id="plotCanvas" width="200" height="200" class="canvas-class"></canvas> <br>
       <span id="content">Log:</span> <br>
-      <p id="log"></p>
+      <p id="log" class="canvas-class"></p>
     </div>
     <div class="column-right">
-      
+      <button id="expandAll">Expand All</button> <br>
+      <button id="collapseAll">Collapse All</button> <br>
+      <div id="tree"></div>
     </div>
   </div>
   

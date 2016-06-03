@@ -1,6 +1,6 @@
 import unittest as ut
 import os, time, base64, re, json, sys, getopt
-from pyndn import Name, Data, Face, Interest
+from pyndn import Name, Data, Face, Interest, Link
 from pyndn.util import Blob, MemoryContentCache
 from pyndn.encrypt import Schedule, Consumer, Sqlite3ConsumerDb, EncryptedContent
 
@@ -15,10 +15,11 @@ import producer.repo_command_response_pb2 as repo_command_response_pb2
 from pyndn.encoding import ProtobufTlv
 
 class TestDPU(object):
-    def __init__(self, face, encryptResult):
+    def __init__(self, face, encryptResult, link = None):
         # Set up face
         self.face = face
         self._encryptResult = encryptResult
+        self._link = link
 
         self.databaseFilePath = "policy_config/test_consumer_dpu.db"
         try:
@@ -36,7 +37,7 @@ class TestDPU(object):
           IdentityManager(identityStorage, privateKeyStorage),
           NoVerifyPolicyManager())
         # Authorized identity
-        identityName = Name("/ndn/edu/ucla/remap/dpu")
+        identityName = Name("/ndn/edu/basel/dpu")
         # Function name: the function that this DPU provides
         self._functionName = "bounding_box"
         self._identityName = identityName
@@ -192,13 +193,14 @@ def usage():
 
 if __name__ == "__main__":
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "e", ["encrypt-result"])
+        opts, args = getopt.getopt(sys.argv[1:], "el", ["encrypt-result", "link="])
     except getopt.GetoptError as err:
         print str(err)
         usage()
         sys.exit(2)
     
     encryptResult = False
+    link = None
 
     for o, a in opts:
         if o in ("-h", "--help"):
@@ -206,11 +208,13 @@ if __name__ == "__main__":
             sys.exit()
         elif o in ("-e", "--encrypt-result"):
             encryptResult = a 
+        elif o in ("-l", "--link"):
+            link = a
         else:
             assert False, "unhandled option"
 
     face = Face()
-    testDPU = TestDPU(face, encryptResult)
+    testDPU = TestDPU(face, encryptResult, link)
 
     while True:
         face.processEvents()

@@ -55,7 +55,7 @@ var certificateName = undefined;
 var groupName = new Name("/org/openmhealth/zhehao");
 indexedDB.deleteDatabase("consumer-db");
 var consumerDb = new IndexedDbConsumerDb("consumer-db");
-var DPUPrefix = "/ndn/edu/ucla/remap/dpu/bounding_box";
+var DPUPrefix = "/ndn/edu/basel/dpu/bounding_box";
 var DSULink = "/ndn/edu/ucla/remap";
 var nacConsumer = new Consumer(face, keyChain, groupName, consumerIdentityName, consumerDb);
 
@@ -64,6 +64,12 @@ function init() {
   document.getElementById("group-manager").value = groupName.toUri();
   document.getElementById("dsu-link").value = DSULink;
   document.getElementById("dpu-prefix").value = DPUPrefix;
+
+  var expandAll = document.getElementById('expandAll');
+  var collapseAll = document.getElementById('collapseAll');
+  treeView = new TreeView(tree, 'tree');
+  expandAll.onclick = function () { treeView.expandAll(); };
+  collapseAll.onclick = function () { treeView.collapseAll(); };
 }
 
 this.keyChain.createIdentityAndCertificate(consumerIdentityName, function(myCertificateName) {
@@ -113,6 +119,7 @@ function onDataNotFound(prefix, interest, face, interestFilterId, filter) {
 }
 
 var onCatalogData = function(interest, data) {
+  insertToTree(data);
   var catalogTimestamp = data.getName().get(-2);
   var exclude = new Exclude();
   exclude.appendAny();
@@ -141,6 +148,7 @@ var onCatalogData = function(interest, data) {
 
 var onCatalogVersionData = function(interest, data) {
   console.log("Got versioned catalog: " + data.getName().toUri());
+  insertToTree(data);
 
   var catalogVersion = data.getName().get(-1);
   var catalogTimestamp = data.getName().get(-2);
@@ -197,8 +205,6 @@ function getCatalogs(username) {
 
   console.log("Express name " + name.toUri());
   face.expressInterest(interest, onCatalogData, onCatalogTimeout);
-
-  document.getElementById("content").innerHTML += "Fetching fitness data under name: " + username + "<br>";
 };
 
 // For unencrypted data
@@ -237,14 +243,11 @@ function getEncryptedData(catalogs) {
   }
 }
 
-function onConsumeComplete(data, result) {
+function onConsumeComplete(data, result) {  
+  insertToTree(data);
   console.log("Consumed fitness data: " + data.getName().toUri());
   var content = JSON.parse(result.buf().toString('binary'));
   console.log("Fitness payload: " + JSON.stringify(content));
-  
-  for (var i = 0; i < content.length; i++) {
-    document.getElementById("content").innerHTML += formatTime(content[i].timeStamp) + "  " + JSON.stringify(content[i]) + "<br>";
-  }
 
   var canvas = document.getElementById("plotCanvas");
   var ctx = canvas.getContext("2d");
@@ -281,6 +284,7 @@ function requestDataAccess(username) {
 }
 
 function onAccessRequestData(interest, data) {
+  insertToTree(data);
   console.log("access request data received: " + data.getName().toUri());
   logString("<b>Data</b>: " + data.getName().toUri() + " <br>");
   logString("<b style=\"color:green\">Access granted</b><br>");
@@ -306,6 +310,8 @@ function formatTime(unixTimestamp) {
 
 // enumerate the current list of users in repo
 function onUserData(interest, data) {
+  insertToTree(data);
+
   console.log("Got user: " + data.getName().get(2).toEscapedString());
   var newInterest = new Interest(interest);
   newInterest.getExclude().appendComponent(data.getName().get(2));
@@ -338,20 +344,16 @@ function getUsers(prefix) {
 
   console.log("Express name " + name.toUri());
   face.expressInterest(interest, onUserData, onUserTimeout);
-
-  document.getElementById("content").innerHTML += "Fetching users under prefix: " + prefix + "<br>";
 }
 
 var onAppData = function (interest, data) {
-  console.log("Got fitness data: " + data.getName().toUri());
+  console.log("Got fitness data: " + data.getName().toUri());  
+  insertToTree(data);
 
   try {
     var content = JSON.parse(data.getContent().buf().toString('binary'));
     console.log("Fitness payload: " + JSON.stringify(content));
     console.log("Data keyLocator keyName: " + data.getSignature().getKeyLocator().getKeyName().toUri());
-    for (var i = 0; i < content.length; i++) {
-      document.getElementById("content").innerHTML += formatTime(content[i].timeStamp) + "  " + JSON.stringify(content[i]) + "<br>";
-    }
 
     var canvas = document.getElementById("plotCanvas");
     var ctx = canvas.getContext("2d");
@@ -393,6 +395,8 @@ function issueDPUInterest(username) {
 
 function onDPUData(interest, data) {
   console.log("onDPUData: " + data.getName().toUri());
+  insertToTree(data);
+
   var innerData = new Data();
   innerData.wireDecode(data.getContent());
 

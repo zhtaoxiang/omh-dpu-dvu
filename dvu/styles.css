@@ -1,7 +1,7 @@
 .column-left { float: left; width: 20%; }
-.column-right { float: right; width: 60%; }
-.column-center { display: inline-block; width: 20%; }
-.canvas-class {border:1px solid #000000;}
+.column-right { float: right; width: 30%; }
+.column-center { display: inline-block; width: 50%; overflow: auto;}
+.canvas-class {border:1px solid #000000; overflow-x: auto;}
 
 .info {
     color: black;
