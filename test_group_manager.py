@@ -61,10 +61,11 @@ class TestGroupManager(object):
 
     def onAccessInterest(self, prefix, interest, face, interestFilterId, filter):
         print "On Access request interest: " + interest.getName().toUri()
-        certInterest = Interest(interest.getName().getSubName(4));
-        certInterest.setInterestLifetimeMilliseconds(2000);
+        certInterest = Interest(interest.getName().getSubName(4))
+        certInterest.setName(certInterest.getName().getPrefix(-1))
+        certInterest.setInterestLifetimeMilliseconds(2000)
 
-        self.face.expressInterest(certInterest, self.onMemberCertificateData, self.onMemberCertificateTimeout);
+        self.face.expressInterest(certInterest, lambda memberInterest, memberData: self.onMemberCertificateData(memberInterest, memberData, interest), self.onMemberCertificateTimeout);
         print "Retrieving member certificate: " + certInterest.getName().toUri()
 
         return
@@ -91,11 +92,14 @@ class TestGroupManager(object):
         
         self.manager.addSchedule("schedule1", schedule1)
 
-    def onMemberCertificateData(self, interest, data):
+    def onMemberCertificateData(self, interest, data, accessInterest):
         print "Member certificate with name retrieved: " + data.getName().toUri() + "; member added to group!"
         self.manager.addMember("schedule1", data)
         self.updateGroupKeys = True
 
+        accessResponse = Data(accessInterest.getName())
+        accessResponse.setContent("granted")
+        self.face.putData(accessResponse)
 
     def onMemberCertificateTimeout(self, interest):
         print "Member certificate interest times out: " + interest.getName().toUri()

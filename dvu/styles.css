@@ -1,0 +1,142 @@
+.column-left { float: left; width: 20%; }
+.column-right { float: right; width: 60%; }
+.column-center { display: inline-block; width: 20%; }
+.canvas-class {border:1px solid #000000;}
+
+.info {
+    color: black;
+    font-size: 8pt;
+}
+
+.instructions {
+    font-size: 14pt;
+    color: black;
+    z-index: 2
+}
+
+
+.nameinfo {
+    font-size: 12pt;
+    display:none;
+    color: black;
+    z-index: 2
+}
+
+.error {
+    margin: 20px;
+    padding: 10px;
+    color: red;
+    font-weight: bold;
+    font-size: 16pt;
+    border: 2px solid red;
+}
+
+textarea {
+    height: 300px;
+    background-color: #fcf8e3;
+    font-family: monospace;
+}
+
+input {
+    background-color: #fcf8e3;
+}
+
+.box {
+    background-color: #eeeeee;
+    padding: 10px 5px 10px 5px;
+    border: 1px solid #cccccc;
+}
+
+pre {
+    margin-left: 20px;
+    font-weight: bold;
+    padding: 5px;
+    margin-top: 5px;
+    margin-bottom: 5px;
+}
+
+/* MISC */
+.grey {
+    color: #727272;
+    font-weight: 200;
+}
+
+.green {
+    color: #2D9A65;
+    font-weight: 200;
+}
+
+.red {
+    color: red;
+    font-weight: 200;
+    font-size: 2.4em;
+}
+
+.hidden {
+    display: none;
+}
+
+/* */
+.item-list
+{
+    border-radius: 6px;
+
+    margin-top: 10px;
+    margin-bottom: 10px;
+    font-family: sans-serif;
+    width: 100%;
+    text-align: left;
+}
+
+.item-list th
+{
+    font-weight: normal;
+    padding: 8px;
+    background: #EAF4EF;
+    border-top: 1px solid #99CCB2;
+    color: #727272;
+    text-align: left;
+}
+
+.item-list th.border-left {
+}
+
+.item-list td
+{
+    padding: 2px;
+    border-bottom: 1px solid #fff;
+    color: #000;
+    border-top: 1px solid transparent;
+}
+
+tr.center td
+{
+    text-align: center;
+}
+
+.border-left {
+    border-left: 1px solid #99CCB2;
+}
+
+.border-right {
+    border-right: 1px solid #99CCB2;
+}
+
+tfoot {
+    border-bottom: 2px solid #99CCB2;
+    background: #EAF4EF;
+}
+
+.item-list tfoot td {
+    padding: 0;
+}
+
+.odd {
+    background-color: #eeeeee;
+}
+
+.highlighted {
+    background-color: #cccccc;
+    cursor: pointer;
+}
+Status API Training Shop Blog About

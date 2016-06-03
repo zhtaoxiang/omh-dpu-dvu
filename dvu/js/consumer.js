@@ -23,7 +23,7 @@ var Config = {
 
   // not a reliable way for determining if catalog probe has finished
   catalogTimeoutThreshold: 1,
-  lngOffset: 160,
+  lngOffset: 150,
   lngTimes: 4
 }
 
@@ -47,15 +47,24 @@ var keyChain = new KeyChain
    policyManager);
 keyChain.setFace(face);
 
-var consumerIdentityName = new Name("/org/openmhealth/dvu");
+var consumerIdentityName = new Name("/org/openmhealth/dvu-browser");
 var memoryContentCache = new MemoryContentCache(face);
 var certificateName = undefined;
 
 // For now, hard-coded group name
 var groupName = new Name("/org/openmhealth/zhehao");
-indexedDB.deleteDatabase("consumer-db")
+indexedDB.deleteDatabase("consumer-db");
 var consumerDb = new IndexedDbConsumerDb("consumer-db");
+var DPUPrefix = "/ndn/edu/ucla/remap/dpu/bounding_box";
+var DSULink = "/ndn/edu/ucla/remap";
 var nacConsumer = new Consumer(face, keyChain, groupName, consumerIdentityName, consumerDb);
+
+function init() {
+  document.getElementById("identity").value = consumerIdentityName.toUri();
+  document.getElementById("group-manager").value = groupName.toUri();
+  document.getElementById("dsu-link").value = DSULink;
+  document.getElementById("dpu-prefix").value = DPUPrefix;
+}
 
 this.keyChain.createIdentityAndCertificate(consumerIdentityName, function(myCertificateName) {
   console.log("myCertificateName: " + myCertificateName.toUri());
@@ -222,6 +231,7 @@ function getEncryptedData(catalogs) {
         var isoTimeString = Schedule.toIsoString(catalogs[username][catalog].content[dataItem] * 1000);
         var isoTimeString = Schedule.toIsoString(catalogs[username][catalog].content[dataItem] * 1000);
         nacConsumer.consume(new Name(name).append(isoTimeString), onConsumeComplete, onConsumeFailed);
+        logString("<b>Interest</b>: " + (new Name(name).append(isoTimeString)).toUri() + " <br>");
       }
     }
   }
@@ -229,17 +239,25 @@ function getEncryptedData(catalogs) {
 
 function onConsumeComplete(data, result) {
   console.log("Consumed fitness data: " + data.getName().toUri());
-  //var content = JSON.parse(data.getContent().buf().toString('binary'));
-  //console.log("Fitness payload: " + JSON.stringify(content));
-  //console.log("Data keyLocator keyName: " + data.getSignature().getKeyLocator().getKeyName().toUri());
-  //for (var i = 0; i < content.length; i++) {
-  //  document.getElementById("content").innerHTML += formatTime(content[i].timeStamp) + "  " + JSON.stringify(content[i]) + "<br>";
-  //}
-  console.log(result);
+  var content = JSON.parse(result.buf().toString('binary'));
+  console.log("Fitness payload: " + JSON.stringify(content));
+  
+  for (var i = 0; i < content.length; i++) {
+    document.getElementById("content").innerHTML += formatTime(content[i].timeStamp) + "  " + JSON.stringify(content[i]) + "<br>";
+  }
+
+  var canvas = document.getElementById("plotCanvas");
+  var ctx = canvas.getContext("2d");
+  ctx.fillRect(content.lat * Config.lngTimes, (content.lng + Config.lngOffset) * Config.lngTimes, 2, 2);
+
+  logString("<b>Data</b>: " + data.getName().toUri() + " <br>");
+  logString("<b style=\"color:green\">Consume successful</b><br>");
 }
 
 function onConsumeFailed(code, message) {
   console.log("Consume failed: " + code + " : " + message);
+  logString("<b>Data</b>: " + data.getName().toUri() + " <br>");
+  logString("<b style=\"color:red\">Consume failed:</b>" + code + " : " + message + "<br>");
 }
 
 function requestDataAccess(username) {
@@ -250,21 +268,28 @@ function requestDataAccess(username) {
   if (username == undefined) {
     username = Config.defaultUsername;
   }
-  var name = new Name(Config.defaultPrefix).append(new Name(username)).append(new Name("read_access_request")).append(new Name(certificateName));
+  var d = new Date();
+  var t = d.getTime();
+
+  var name = new Name(Config.defaultPrefix).append(new Name(username)).append(new Name("read_access_request")).append(new Name(certificateName)).appendVersion(t);
   var interest = new Interest(name);
   //interest.setInterestLifetimeMilliseconds(Config.defaultInterestLifetime);
   interest.setMustBeFresh(true);
 
   console.log("Express name " + name.toUri());
   face.expressInterest(interest, onAccessRequestData, onAccessRequestTimeout);
+  logString("<b>Interest</b>: " + interest.getName().toUri() + " <br>");
 }
 
 function onAccessRequestData(interest, data) {
   console.log("access request data received: " + data.getName().toUri());
+  logString("<b>Data</b>: " + data.getName().toUri() + " <br>");
+  logString("<b style=\"color:green\">Access granted</b><br>");
 }
 
 function onAccessRequestTimeout(interest) {
   console.log("access request " + interest.getName().toUri() + " times out!");
+  logString("<b style=\"color:red\">Request timed out</b><br>");
 }
 
 function formatTime(unixTimestamp) {
@@ -293,6 +318,14 @@ function onUserTimeout(interest) {
   console.log("User interest timeout; scan for user finishes");
 }
 
+function logString(str) {
+  document.getElementById("log").innerHTML += str;
+}
+
+function logClear() {
+  document.getElementById("log").innerHTML = "";
+}
+
 function getUsers(prefix) {
   if (prefix == undefined) {
     prefix = Config.defaultPrefix;
@@ -313,16 +346,27 @@ function getUsers(prefix) {
 var onAppData = function (interest, data) {
   console.log("Got fitness data: " + data.getName().toUri());
 
-  var content = JSON.parse(data.getContent().buf().toString('binary'));
-  console.log("Fitness payload: " + JSON.stringify(content));
-  console.log("Data keyLocator keyName: " + data.getSignature().getKeyLocator().getKeyName().toUri());
-  for (var i = 0; i < content.length; i++) {
-    document.getElementById("content").innerHTML += formatTime(content[i].timeStamp) + "  " + JSON.stringify(content[i]) + "<br>";
-  }
+  try {
+    var content = JSON.parse(data.getContent().buf().toString('binary'));
+    console.log("Fitness payload: " + JSON.stringify(content));
+    console.log("Data keyLocator keyName: " + data.getSignature().getKeyLocator().getKeyName().toUri());
+    for (var i = 0; i < content.length; i++) {
+      document.getElementById("content").innerHTML += formatTime(content[i].timeStamp) + "  " + JSON.stringify(content[i]) + "<br>";
+    }
 
-  var canvas = document.getElementById("plotCanvas");
-  var ctx = canvas.getContext("2d");
-  ctx.fillRect(content.lat * Config.lngTimes, (content.lng + Config.lngOffset) * Config.lngTimes, 2, 2);
+    var canvas = document.getElementById("plotCanvas");
+    var ctx = canvas.getContext("2d");
+    ctx.fillRect(content.lat * Config.lngTimes, (content.lng + Config.lngOffset) * Config.lngTimes, 2, 2);
+
+    logString("<b>Interest</b>: " + interest.getName().toUri() + " <br>");
+    logString("<b>Data</b>: " + data.getName().toUri() + " <br>");
+    logString("<b>Consume successful</b><br>");
+  } catch (e) {
+    console.log(e);
+    logString("<b>Interest</b>: " + interest.getName().toUri() + " <br>");
+    logString("<b>Data</b>: " + data.getName().toUri() + " <br>");
+    logString("<b style=\"color:red\">Consume failed</b>: " + e.toString() + "; Content " + data.getContent().buf().toString('hex') + "<br>");
+  }
 }
 
 var onAppDataTimeout = function (interest) {
@@ -335,9 +379,9 @@ function issueDPUInterest(username) {
     username = Config.defaultUsername;
   }
 
-  var parameters = Name.fromEscapedString("/org/openmhealth/zhehao,20160320T080,/org/openmhealth/zhehao");
+  var parameters = Name.fromEscapedString("/org/openmhealth/zhehao,20160320T080,/org/openmhealth/zhehao/SAMPLE/fitness/physical_activity/processed_result/bounding_box/20160320T080000");
   console.log(parameters);
-  var name = new Name("/ndn/edu/ucla/remap/dpu/bounding_box").append(parameters);
+  var name = new Name(DPUPrefix).append(parameters);
   // DistanceTo
   //var name = new Name(Config.defaultPrefix).append(new Name(username)).append(new Name("data/fitness/physical_activity/genericfunctions/distanceTo/(100,100)/20160320T080030"));
   var interest = new Interest(name);
@@ -360,14 +404,19 @@ function onDPUData(interest, data) {
   var canvas = document.getElementById("plotCanvas");
   var ctx = canvas.getContext("2d");
   ctx.beginPath();
-  ctx.moveTo(dpuObject.minlat * Config.lngTimes, (dpuObject.minlng + Config.lngOffset) * Config.lngTimes);
-  ctx.lineTo(dpuObject.minlat * Config.lngTimes, (dpuObject.maxlng + Config.lngOffset) * Config.lngTimes);
+  ctx.moveTo(dpuObject.minLat * Config.lngTimes, (dpuObject.minLng + Config.lngOffset) * Config.lngTimes);
+  ctx.lineTo(dpuObject.minLat * Config.lngTimes, (dpuObject.maxLng + Config.lngOffset) * Config.lngTimes);
 
-  ctx.lineTo(dpuObject.maxlat * Config.lngTimes, (dpuObject.maxlng + Config.lngOffset) * Config.lngTimes);
-  ctx.lineTo(dpuObject.maxlat * Config.lngTimes, (dpuObject.minlng + Config.lngOffset) * Config.lngTimes);
-  ctx.lineTo(dpuObject.minlat * Config.lngTimes, (dpuObject.minlng + Config.lngOffset) * Config.lngTimes);
+  ctx.lineTo(dpuObject.maxLat * Config.lngTimes, (dpuObject.maxLng + Config.lngOffset) * Config.lngTimes);
+  ctx.lineTo(dpuObject.maxLat * Config.lngTimes, (dpuObject.minLng + Config.lngOffset) * Config.lngTimes);
+  ctx.lineTo(dpuObject.minLat * Config.lngTimes, (dpuObject.minLng + Config.lngOffset) * Config.lngTimes);
   ctx.strokeStyle = '#ff0000';
   ctx.stroke();
+
+  logString("<b>Interest</b>: " + interest.getName().toUri() + " <br>");
+  logString("<b>Outer data</b>: " + data.getName().toUri() + " <br>");
+  logString("<b>Inner data</b>: " + innerData.getName().toUri() + " <br>");
+  logString("<b style=\"color:green\">Consume successful</b>");
 }
 
 function onDPUTimeout(interest) {

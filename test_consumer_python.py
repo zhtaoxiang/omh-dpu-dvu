@@ -61,18 +61,20 @@ class TestConsumer(object):
         self.memoryContentCache.registerPrefix(identityName, self.onRegisterFailed, self.onDataNotFound)
         self.memoryContentCache.add(consumerCertificate)
 
-        accessRequestInterest = Interest(Name(self.groupName).append("read_access_request").append(self.certificateName))
+        accessRequestInterest = Interest(Name(self.groupName).append("read_access_request").append(self.certificateName).appendVersion(int(time.time())))
         self.face.expressInterest(accessRequestInterest, self.onAccessRequestData, self.onAccessRequestTimeout)
         print "Access request interest name: " + accessRequestInterest.getName().toUri()
         return
 
     def onAccessRequestData(self, interest, data):
         print "Access request data: " + data.getName().toUri()
+        print "Start consuming"
+        self.startConsuming()
         return
 
     def onAccessRequestTimeout(self, interest):
         print "Access request times out: " + interest.getName().toUri()
-        print "Assuming certificate sent and D-key generated"
+        print "Assuming certificate sent and D-key generated, start consuming"
         self.startConsuming()
         return
 

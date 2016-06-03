@@ -1,5 +1,5 @@
 import unittest as ut
-import os, time, base64, re, json
+import os, time, base64, re, json, sys, getopt
 from pyndn import Name, Data, Face, Interest
 from pyndn.util import Blob, MemoryContentCache
 from pyndn.encrypt import Schedule, Consumer, Sqlite3ConsumerDb, EncryptedContent
@@ -14,10 +14,11 @@ import producer.repo_command_parameter_pb2 as repo_command_parameter_pb2
 import producer.repo_command_response_pb2 as repo_command_response_pb2
 from pyndn.encoding import ProtobufTlv
 
-class TestConsumer(object):
-    def __init__(self, face):
+class TestDPU(object):
+    def __init__(self, face, encryptResult):
         # Set up face
         self.face = face
+        self._encryptResult = encryptResult
 
         self.databaseFilePath = "policy_config/test_consumer_dpu.db"
         try:
@@ -66,7 +67,7 @@ class TestConsumer(object):
         self.memoryContentCache.registerPrefix(identityName, self.onRegisterFailed, self.onDataNotFound)
         self.memoryContentCache.add(consumerCertificate)
 
-        accessRequestInterest = Interest(Name(self.groupName).append("read_access_request").append(self.certificateName))
+        accessRequestInterest = Interest(Name(self.groupName).append("read_access_request").append(self.certificateName).appendVersion(int(time.time())))
         self.face.expressInterest(accessRequestInterest, self.onAccessRequestData, self.onAccessRequestTimeout)
         print "Access request interest name: " + accessRequestInterest.getName().toUri()
 
@@ -144,17 +145,20 @@ class TestConsumer(object):
                     if dataObject["lng"] < minLng:
                         minLng = dataObject["lng"]
 
-                innerData = Data(Name(str(producedDataName)))
-                innerData.setContent(json.dumps({"minLat": minLat, "maxLat": maxLat, "minLng": minLng, "maxLng": maxLng}))
-                #self.keyChain.sign(innerData)
+                if not self._encryptResult:
+                    innerData = Data(Name(str(producedDataName)))
+                    innerData.setContent(json.dumps({"minLat": minLat, "maxLat": maxLat, "minLng": minLng, "maxLng": maxLng}))
+                    #self.keyChain.sign(innerData)
 
-                outerData = Data(Name(str(outerDataName)))
-                outerData.setContent(innerData.wireEncode())
-                #self.keyChain.sign(outerData)
+                    outerData = Data(Name(str(outerDataName)))
+                    outerData.setContent(innerData.wireEncode())
+                    #self.keyChain.sign(outerData)
 
-                self.memoryContentCache.add(outerData)
-                self.initiateContentStoreInsertion("/ndn/edu/ucla/remap/ndnfit/repo", outerData)
-                print "Calculation completed, put data to repo"
+                    self.memoryContentCache.add(outerData)
+                    self.initiateContentStoreInsertion("/ndn/edu/ucla/remap/ndnfit/repo", outerData)
+                    print "Calculation completed, put data to repo"
+                else:
+                    print "Encrypt result is not implemented"
 
     def onConsumeFailed(self, code, message):
         print "Consume error " + str(code) + ": " + message
@@ -182,9 +186,31 @@ class TestConsumer(object):
         #print "repo command times out: " + interest.getName().getPrefix(-1).toUri()
         return
 
+def usage():
+    print "Fill this in"
+    return
+
 if __name__ == "__main__":
+    try:
+        opts, args = getopt.getopt(sys.argv[1:], "e", ["encrypt-result"])
+    except getopt.GetoptError as err:
+        print str(err)
+        usage()
+        sys.exit(2)
+    
+    encryptResult = False
+
+    for o, a in opts:
+        if o in ("-h", "--help"):
+            usage()
+            sys.exit()
+        elif o in ("-e", "--encrypt-result"):
+            encryptResult = a 
+        else:
+            assert False, "unhandled option"
+
     face = Face()
-    testConsumer = TestConsumer(face)
+    testDPU = TestDPU(face, encryptResult)
 
     while True:
         face.processEvents()

@@ -6,6 +6,7 @@
 
   <script type="text/javascript" src="js/ndn-js.min.js"></script>
   <script type="text/javascript" src="js/consumer.js"></script>
+  <link rel="stylesheet" type="text/css" href="styles.css"/>
   
   <script type="text/javascript">
     catalogProbeFinishedCallback = function (catalogs) {
@@ -19,6 +20,7 @@
     }
 
     function getCatalogsClick() {
+      logClear();
       var username = document.getElementById("userInput").value;
       if (username != "" && username != undefined) {
         getCatalogs(username);
@@ -28,6 +30,7 @@
     }
 
     function requestDataAccessClick() {
+      logClear();
       var username = document.getElementById("userInput").value;
       if (username != "" && username != undefined) {
         requestDataAccess(username);
@@ -37,6 +40,7 @@
     }
 
     function issueDPUInterestClick() {
+      logClear();
       var username = document.getElementById("userInput").value;
       if (username != "" && username != undefined) {
         issueDPUInterest(username);
@@ -53,6 +57,7 @@
 
     function onDPUNFNData(interest, data) {
       // This is encapsulated
+      logClear();
       console.log(data.getContent());
       console.log("onDPU NFN data: " + data.getName().toUri());
       newData = new Data();
@@ -68,17 +73,37 @@
   </script>
 </head>
 
-<body>
-  <input id="userInput" type="text"></input> <br>
+<body onload="init()">
+  <div class="container">
+    <div class="column-left">
+      <p>
+        DVU identity: <br><input id="identity" type="text" value="zhehao" readonly size="40"></input> <br>
+        Group name: <br><input id="group-manager" type="text" value="zhehao" readonly size="40"></input> <br>
+        Follow username: <br><input id="userInput" type="text" value="zhehao" readonly size="40"></input> <br>
+        DSU name: <br><input id="dsu-link" type="text" value="zhehao" readonly size="40"></input> <br>
+        DPU prefix: <br><input id="dpu-prefix" type="text" value="zhehao" readonly size="40"></input> <br>
+        Follow username: <br><input id="userInput" type="text" value="zhehao" readonly size="40"></input> <br>
+      </p>
+      <input id="fetchEncrypted" type="checkbox">Fetch encrypted</input> <br>
+      
+      <button id="userBtn" onclick="getUsers()">Scan users</button> <br>
+      
+      <button id="catalogBtn" onclick="getCatalogsClick()">Get data</button> <br>
 
-  <input id="fetchEncrypted" type="checkbox">Fetch encrypted</input> <br>
-  <button id="userBtn" onclick="getUsers()">Scan users</button> <br>
-  <button id="catalogBtn" onclick="getCatalogsClick()">Get data</button> <br>
-  <button id="dpuBtn" onclick="issueDPUInterestClick()">Call DPU (Bounding box)</button> <br>
-  <button id="dpuBtn" onclick="requestDataAccessClick()">Request data access</button> <br>
-  <p id="content">Content: <br/></p> <br>
-
-  <canvas id="plotCanvas" width="400" height="400"></canvas>
+      <button id="dpuBtn" onclick="issueDPUInterestClick()">Call DPU</button> <br>
+      <button id="accessBtn" onclick="requestDataAccessClick()">Request data access</button> <br>
+    </div>
+    <div class="column-center">
+      <span>2D location data bounding box visualization:</span><br>
+      <canvas id="plotCanvas" width="200" height="200" class="canvas-class"></canvas> <br>
+      <span id="content">Log:</span> <br>
+      <p id="log"></p>
+    </div>
+    <div class="column-right">
+      
+    </div>
+  </div>
+  
 </body>
 
 <html>
