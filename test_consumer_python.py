@@ -35,7 +35,7 @@ class TestConsumer(object):
           IdentityManager(identityStorage, privateKeyStorage),
           NoVerifyPolicyManager())
         # Authorized identity
-        identityName = Name("/org/openmhealth/dvu-python-7")
+        identityName = Name("/org/openmhealth/dvu-python-3")
         # Unauthorized identity
         #identityName = Name("/org/openmhealth/dvu-python-1")
         
