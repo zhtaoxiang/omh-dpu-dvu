@@ -83,14 +83,14 @@ class TestConsumer(object):
 
     def startConsuming(self):
         if self.consumeCatalog:
-            contentName = Name("/org/openmhealth/zhehao/SAMPLE/fitness/physical_activity/time_location/catalog/20160320T080000")
+            contentName = Name("/org/openmhealth/zhehao/SAMPLE/fitness/physical_activity/time_location/catalog/20160620T080000")
             self.consumer.consume(contentName, self.onCatalogConsumeComplete, self.onConsumeFailed)
             print "Trying to consume: " + contentName.toUri()
         else:
             contentName = Name("/org/openmhealth/zhehao/SAMPLE/fitness/physical_activity/time_location/")
             dataNum = 60
             baseZFill = 3
-            basetimeString = "20160320T080"
+            basetimeString = "20160620T080"
 
             for i in range(0, dataNum):
                 timeString = basetimeString + str(i).zfill(baseZFill)

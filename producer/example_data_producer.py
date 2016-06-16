@@ -127,7 +127,7 @@ if __name__ == "__main__":
     repoPrefix = "/ndn/edu/ucla/remap/ndnfit/repo"
     testProducer = SampleProducer(face, username, memoryContentCache)
 
-    basetimeString = "20160320T080"
+    basetimeString = "20160620T080"
     baseZFill = 3
     baseLat = 34
     baseLng = -118

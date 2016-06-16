@@ -87,8 +87,8 @@ class TestGroupManager(object):
     def setManager(self):
         schedule1 = Schedule()
         interval11 = RepetitiveInterval(
-          Schedule.fromIsoString("20160320T080000"),
-          Schedule.fromIsoString("20160320T080000"), 8, 10, 1,
+          Schedule.fromIsoString("20160620T080000"),
+          Schedule.fromIsoString("20160620T080000"), 8, 10, 1,
           RepetitiveInterval.RepeatUnit.DAY)
         schedule1.addWhiteInterval(interval11)
         
@@ -113,7 +113,7 @@ class TestGroupManager(object):
         return
 
     def publishGroupKeys(self):
-        timePoint1 = Schedule.fromIsoString("20160320T083000")
+        timePoint1 = Schedule.fromIsoString("20160620T083000")
         result = self.manager.getGroupKey(timePoint1)
 
         # The first is group public key, E-key
