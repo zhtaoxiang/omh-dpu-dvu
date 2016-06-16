@@ -1,5 +1,6 @@
 import unittest as ut
-import os, time, base64
+import os, time, base64, json
+
 from pyndn import Name, Data, Face, Interest
 from pyndn.util import Blob, MemoryContentCache
 from pyndn.encrypt import Schedule, Consumer, Sqlite3ConsumerDb, EncryptedContent
@@ -64,6 +65,8 @@ class TestConsumer(object):
         accessRequestInterest = Interest(Name(self.groupName).append("read_access_request").append(self.certificateName).appendVersion(int(time.time())))
         self.face.expressInterest(accessRequestInterest, self.onAccessRequestData, self.onAccessRequestTimeout)
         print "Access request interest name: " + accessRequestInterest.getName().toUri()
+
+        self.consumeCatalog = True
         return
 
     def onAccessRequestData(self, interest, data):
@@ -79,17 +82,22 @@ class TestConsumer(object):
         return
 
     def startConsuming(self):
-        contentName = Name("/org/openmhealth/zhehao/SAMPLE/fitness/physical_activity/time_location/")
-        dataNum = 60
-        baseZFill = 3
-        basetimeString = "20160320T080"
+        if self.consumeCatalog:
+            contentName = Name("/org/openmhealth/zhehao/SAMPLE/fitness/physical_activity/time_location/catalog/20160320T080000")
+            self.consumer.consume(contentName, self.onCatalogConsumeComplete, self.onConsumeFailed)
+            print "Trying to consume: " + contentName.toUri()
+        else:
+            contentName = Name("/org/openmhealth/zhehao/SAMPLE/fitness/physical_activity/time_location/")
+            dataNum = 60
+            baseZFill = 3
+            basetimeString = "20160320T080"
 
-        for i in range(0, dataNum):
-            timeString = basetimeString + str(i).zfill(baseZFill)
-            timeFloat = Schedule.fromIsoString(timeString)
+            for i in range(0, dataNum):
+                timeString = basetimeString + str(i).zfill(baseZFill)
+                timeFloat = Schedule.fromIsoString(timeString)
 
-            self.consume(Name(contentName).append(timeString))
-            print "Trying to consume: " + Name(contentName).append(timeString).toUri()
+                self.consumer.consume(Name(contentName).append(timeString), self.onConsumeComplete, self.onConsumeFailed)
+                print "Trying to consume: " + Name(contentName).append(timeString).toUri()
 
 
     def onDataNotFound(self, prefix, interest, face, interestFilterId, filter):
@@ -100,8 +108,16 @@ class TestConsumer(object):
         print "Prefix registration failed: " + prefix.toUri()
         return
 
-    def consume(self, contentName):
-        self.consumer.consume(contentName, self.onConsumeComplete, self.onConsumeFailed)
+    def onCatalogConsumeComplete(self, data, result):
+        print "Consume complete for catalog: " + data.getName().toUri()
+        resultObject = json.loads(result.toRawStr())
+
+        contentName = Name("/org/openmhealth/zhehao/SAMPLE/fitness/physical_activity/time_location/")
+        
+        for i in range(0, len(resultObject)):
+            timeString = Schedule.toIsoString(int(resultObject[i]) * 1000)
+            self.consumer.consume(Name(contentName).append(timeString), self.onConsumeComplete, self.onConsumeFailed)
+            print "Trying to consume: " + Name(contentName).append(timeString).toUri()
 
     def onConsumeComplete(self, data, result):
         print "Consume complete for data name: " + data.getName().toUri()
@@ -115,6 +131,7 @@ class TestConsumer(object):
         # encryptedData = dataContent.getPayload()
         # print len(encryptedData)
 
+    # TODO: shouldn't this indicate the consumption of what has failed though
     def onConsumeFailed(self, code, message):
         print "Consume error " + str(code) + ": " + message
 

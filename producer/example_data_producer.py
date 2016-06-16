@@ -34,25 +34,42 @@ class SampleProducer(object):
         self.face.setCommandSigningInfo(self.keyChain, self.certificateName)
 
         self.databaseFilePath = "policy_config/test_producer.db"
+        self.catalogDatabaseFilePath = "policy_config/test_producer_catalog.db"
         try:
             os.remove(self.databaseFilePath)
         except OSError:
             # no such file
             pass
+        try:
+            os.remove(self.catalogDatabaseFilePath)
+        except OSError:
+            # no such file
+            pass
 
         self.testDb = Sqlite3ProducerDb(self.databaseFilePath)
+        self.catalogDb = Sqlite3ProducerDb(self.catalogDatabaseFilePath)
+
+        # TODO: as of right now, catalog has a different suffix, so need another instance of producer; that producer cannot share
+        # the same DB with the first producer, otherwise there won't be a self.onEncryptedKeys call; as the catalog producer uses 
+        # its own C-key, and that key won't be encrypted by an E-key as no interest goes out
+        # This sounds like something problematic from the library
         prefix = Name(username)
         suffix = Name("fitness/physical_activity/time_location")
 
-        self.producer = Producer(prefix, suffix, self.face, self.keyChain, self.testDb)
+        self.producer = Producer(Name(prefix), suffix, self.face, self.keyChain, self.testDb)
+
+        catalogSuffix = Name(suffix).append("catalog")
+        self.catalogProducer = Producer(Name(prefix), catalogSuffix, self.face, self.keyChain, self.catalogDb)
 
         self.memoryContentCache = memoryContentCache
         return
 
     def createContentKey(self, timeSlot):
-        print "debug: createContentKey"
+        print "debug: createContentKey for data and catalog"
         contentKeyName = self.producer.createContentKey(timeSlot, self.onEncryptedKeys, self.onError)
+        catalogKeyName = self.catalogProducer.createContentKey(timeSlot, self.onEncryptedKeys, self.onError)
         print contentKeyName.toUri()
+        print catalogKeyName.toUri()
 
     def onError(self, code, msg):
         print str(code) + " : " + msg
@@ -144,8 +161,17 @@ if __name__ == "__main__":
 
     catalogData.setContent(json.dumps(catalogContentArray))
     testProducer.keyChain.sign(catalogData)
+    
+    encryptedCatalogData = Data()
+    testProducer.catalogProducer.produce(encryptedCatalogData, Schedule.fromIsoString(basetimeString + str(0).zfill(baseZFill)), Blob(json.dumps(catalogContentArray), False))
+    print "Encrypted catalog name is " + encryptedCatalogData.getName().toUri()
+
+    # Put the unencrypted as well as encrypted catalog into repo
     testProducer.initiateContentStoreInsertion(repoPrefix, catalogData)
+    testProducer.initiateContentStoreInsertion(repoPrefix, encryptedCatalogData)
+
     memoryContentCache.add(catalogData)
+    memoryContentCache.add(encryptedCatalogData)
 
     # Produce unencrypted data for this user
     unencryptedUserName = "/org/openmhealth/haitao"
