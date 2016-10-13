@@ -31,4 +31,16 @@ For example,
   * Adds member with the certificate name "/ndn/member0/KEY/ksk-1456805664/ID-CERT/%FD%00%00%01S0bVr"
   * Publish the group's public key, generate E-key and D-key for its member, and publish encrypted D-key for each member
 
-### Testing
+### Testing:
+
+* (For now) Install a [custom branch](https://github.com/zhehaowang/PyNDN2/tree/encryption-debug) of PyNDN2, with fixes in NBAC library functionalities (with getGroupKey and producer exclusion range change) ([sudo] python setup.py install [--user])
+* Start NFD, if testing all 3 (producer, manager, consumer) on the same local machine, consider use multicast strategy for /org/openmhealth
+* Run group-manager (python test\_group\_mananger.py) (the sequence of doing things, unfortunately, matters!)
+* Run example producer (cd producer, python example\_data\_producer.py)
+* Run consumer (python test\_consumer\_python.py for a simple consumer; or python dpu.py for a test DPU, and launch dvu/index.html for another consumer example, or trigger simple DPU computation (bounding box))
+
+Video walkthrough (screen recording): https://www.youtube.com/watch?v=3l2w30rZqdk
+
+For now all the names (identity, produced data names, etc); some components may not be calling "createIdentityAndCertificate" if desired identities don't exist, so please consider "ndnsec-keygen"
+
+To access existing encrypted data on memoria.ndn.ucla.edu, use this consumer key pair and certificate: https://github.com/zhehaowang/sample-omh-dpu/tree/master/certs
