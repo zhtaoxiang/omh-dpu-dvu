@@ -28,7 +28,7 @@ class TestDPU(object):
             # no such file
             pass
 
-        self.groupName = Name("/org/openmhealth/zhehao")
+        self.groupName = Name("/org/openmhealth/haitao")
 
         # Set up the keyChain.
         identityStorage = BasicIdentityStorage()
@@ -87,10 +87,10 @@ class TestDPU(object):
 
     def startConsuming(self, userId, basetimeString, producedDataName, dataNum, outerDataName):
         contentName = Name(userId).append(Name("/SAMPLE/fitness/physical_activity/time_location/"))
-        baseZFill = 3
+        baseZFill = 2
 
         for i in range(0, dataNum):
-            timeString = basetimeString + str(i).zfill(baseZFill)
+            timeString = basetimeString + str(i).zfill(baseZFill) + '00'
             timeFloat = Schedule.fromIsoString(timeString)
 
             self.consume(Name(contentName).append(timeString), producedDataName, outerDataName)
@@ -104,11 +104,13 @@ class TestDPU(object):
                 parameters = interest.getName().get(functionComponentIdx + 1).toEscapedString()
                 pattern = re.compile('([^,]*),([^,]*),([^,]*)')
                 matching = pattern.match(str(Name.fromEscapedString(parameters)))
-                
+                #print parameters
+                #print str(Name.fromEscapedString(parameters))
+
                 userId = matching.group(1)
                 basetimeString = matching.group(2)
                 producedDataName = matching.group(3)
-                dataNum = 60
+                dataNum = 2
                 self._tasks[producedDataName] = {"cap_num": dataNum, "current_num": 0, "dataset": []}
                 self.startConsuming(userId, basetimeString, producedDataName, dataNum, interest.getName().toUri())
             except Exception as e:
@@ -122,47 +124,56 @@ class TestDPU(object):
         return
 
     def consume(self, contentName, producedDataName, outerDataName):
-        self.consumer.consume(contentName, lambda data, result: self.onConsumeComplete(data, result, producedDataName, outerDataName), self.onConsumeFailed)
+        self.consumer.consume(contentName, lambda data, result: self.onConsumeComplete(data, result, producedDataName, outerDataName), lambda code, message : self.onConsumeFailed(code, message, producedDataName, outerDataName))
 
     def onConsumeComplete(self, data, result, producedDataName, outerDataName):
         print "Consume complete for data name: " + data.getName().toUri()
 
         if producedDataName in self._tasks:
             self._tasks[producedDataName]["current_num"] += 1
-            self._tasks[producedDataName]["dataset"].append(result)
+            resultObject = json.loads(str(result))
+            for i in range(0, len(resultObject)):
+                self._tasks[producedDataName]["dataset"].append(resultObject[i])
             if self._tasks[producedDataName]["current_num"] == self._tasks[producedDataName]["cap_num"]:
-                maxLng = -1000
-                minLng = 1000
-                maxLat = -1000
-                minLat = 1000
-                for item in self._tasks[producedDataName]["dataset"]:
-                    dataObject = json.loads(str(item))
-                    if dataObject["lat"] > maxLat:
-                        maxLat = dataObject["lat"]
-                    if dataObject["lat"] < minLat:
-                        minLat = dataObject["lat"]
-                    if dataObject["lng"] > maxLng:
-                        maxLng = dataObject["lng"]
-                    if dataObject["lng"] < minLng:
-                        minLng = dataObject["lng"]
+                self.onGetAllData(producedDataName, outerDataName)
 
-                if not self._encryptResult:
-                    innerData = Data(Name(str(producedDataName)))
-                    innerData.setContent(json.dumps({"minLat": minLat, "maxLat": maxLat, "minLng": minLng, "maxLng": maxLng}))
-                    #self.keyChain.sign(innerData)
-
-                    outerData = Data(Name(str(outerDataName)))
-                    outerData.setContent(innerData.wireEncode())
-                    #self.keyChain.sign(outerData)
-
-                    self.memoryContentCache.add(outerData)
-                    self.initiateContentStoreInsertion("/ndn/edu/ucla/remap/ndnfit/repo", outerData)
-                    print "Calculation completed, put data to repo"
-                else:
-                    print "Encrypt result is not implemented"
-
-    def onConsumeFailed(self, code, message):
+    def onConsumeFailed(self, code, message, producedDataName, outerDataName):
         print "Consume error " + str(code) + ": " + message
+        if producedDataName in self._tasks:
+            self._tasks[producedDataName]["current_num"] += 1
+            if self._tasks[producedDataName]["current_num"] == self._tasks[producedDataName]["cap_num"]:
+                self.onGetAllData(producedDataName, outerDataName)
+
+    def onGetAllData(self, producedDataName, outerDataName):
+        maxLng = -1000
+        minLng = 1000
+        maxLat = -1000
+        minLat = 1000
+        for item in self._tasks[producedDataName]["dataset"]:
+            dataObject = json.loads(str(item))
+            if dataObject["lat"] > maxLat:
+                maxLat = dataObject["lat"]
+            if dataObject["lat"] < minLat:
+                minLat = dataObject["lat"]
+            if dataObject["lng"] > maxLng:
+                maxLng = dataObject["lng"]
+            if dataObject["lng"] < minLng:
+                minLng = dataObject["lng"]
+
+        if not self._encryptResult:
+            innerData = Data(Name(str(producedDataName)))
+            innerData.setContent(json.dumps({"minLat": minLat, "maxLat": maxLat, "minLng": minLng, "maxLng": maxLng}))
+            #self.keyChain.sign(innerData)
+
+            outerData = Data(Name(str(outerDataName)))
+            outerData.setContent(innerData.wireEncode())
+            #self.keyChain.sign(outerData)
+
+            self.memoryContentCache.add(outerData)
+            self.initiateContentStoreInsertion("/ndn/edu/ucla/remap/ndnfit/repo", outerData)
+            print "Calculation completed, put data to repo"
+        else:
+            print "Encrypt result is not implemented"
 
     def initiateContentStoreInsertion(self, repoCommandPrefix, data):
         fetchName = data.getName()
@@ -193,7 +204,7 @@ def usage():
 
 if __name__ == "__main__":
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "el", ["encrypt-result", "link="])
+        opts, args = getopt.getopt(sys.argv[1:], "el:h", ["encrypt-result", "link=", "help"])
     except getopt.GetoptError as err:
         print str(err)
         usage()
@@ -207,7 +218,7 @@ if __name__ == "__main__":
             usage()
             sys.exit()
         elif o in ("-e", "--encrypt-result"):
-            encryptResult = a 
+            encryptResult = True
         elif o in ("-l", "--link"):
             link = a
         else:

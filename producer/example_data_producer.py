@@ -33,8 +33,8 @@ class SampleProducer(object):
 
         self.face.setCommandSigningInfo(self.keyChain, self.certificateName)
 
-        self.databaseFilePath = "policy_config/test_producer.db"
-        self.catalogDatabaseFilePath = "policy_config/test_producer_catalog.db"
+        self.databaseFilePath = "../policy_config/test_producer.db"
+        self.catalogDatabaseFilePath = "../policy_config/test_producer_catalog.db"
         try:
             os.remove(self.databaseFilePath)
         except OSError:
@@ -122,17 +122,17 @@ if __name__ == "__main__":
     face = Face()
     memoryContentCache = MemoryContentCache(face)
     # Produce encrypted data for this user
-    username = "/org/openmhealth/zhehao/"
+    username = "/org/openmhealth/haitao/"
     # Insert into this repo
     repoPrefix = "/ndn/edu/ucla/remap/ndnfit/repo"
     testProducer = SampleProducer(face, username, memoryContentCache)
 
-    basetimeString = "20160620T080"
+    basetimeString = "20161024T080"
     baseZFill = 3
     baseLat = 34
     baseLng = -118
     # This should be less than 1 minute
-    dataNum = 60
+    dataNum = 2
 
     # Create the content key once
     originalTimeString = basetimeString + str(0).zfill(baseZFill)
@@ -141,7 +141,7 @@ if __name__ == "__main__":
 
     memoryContentCache.registerPrefix(Name(username), onRegisterFailed, onDataNotFound)
 
-    catalogData = Data(Name(username).append(Name("/data/fitness/physical_activity/time_location/catalog/")).append(originalTimeString).appendVersion(1))
+    catalogData = Data(Name(username).append(Name("/SAMPLE/fitness/physical_activity/time_location/catalog/")).append(originalTimeString))
     catalogContentArray = []
 
     for i in range(0, dataNum):
@@ -161,6 +161,7 @@ if __name__ == "__main__":
 
     catalogData.setContent(json.dumps(catalogContentArray))
     testProducer.keyChain.sign(catalogData)
+    print "Unencrypted catalog name is " + catalogData.getName().toUri()
     
     encryptedCatalogData = Data()
     testProducer.catalogProducer.produce(encryptedCatalogData, Schedule.fromIsoString(basetimeString + str(0).zfill(baseZFill)), Blob(json.dumps(catalogContentArray), False))
@@ -171,10 +172,10 @@ if __name__ == "__main__":
     testProducer.initiateContentStoreInsertion(repoPrefix, encryptedCatalogData)
 
     memoryContentCache.add(catalogData)
-    memoryContentCache.add(encryptedCatalogData)
+    # memoryContentCache.add(encryptedCatalogData)
 
-    # Produce unencrypted data for this user
-    unencryptedUserName = "/org/openmhealth/haitao"
+    # Produce unencrypted data for this user 
+    unencryptedUserName = "/org/openmhealth/zhehao"
     memoryContentCache.registerPrefix(Name(unencryptedUserName), onRegisterFailed, onDataNotFound)
 
     catalogData = Data(Name(unencryptedUserName).append(Name("/data/fitness/physical_activity/time_location/catalog/")).append(originalTimeString).appendVersion(1))

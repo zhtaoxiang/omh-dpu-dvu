@@ -53,7 +53,7 @@ class TestGroupManager(object):
           self.keyChain)
 
         self.memoryContentCache = MemoryContentCache(self.face)
-        self.memoryContentCache.registerPrefix(groupManagerName, self.onRegisterFailed, self.onDataNotFound)
+        self.memoryContentCache.registerPrefix(Name(groupManagerName).append("READ"), self.onRegisterFailed, self.onDataNotFound)
         self.face.registerPrefix(readAccessName, self.onAccessInterest, self.onAccessTimeout)
 
         self.updateGroupKeys = False
@@ -87,8 +87,8 @@ class TestGroupManager(object):
     def setManager(self):
         schedule1 = Schedule()
         interval11 = RepetitiveInterval(
-          Schedule.fromIsoString("20160620T080000"),
-          Schedule.fromIsoString("20160620T080000"), 8, 10, 1,
+          Schedule.fromIsoString("20161001T000000"),
+          Schedule.fromIsoString("20161031T000000"), 0, 24, 1,
           RepetitiveInterval.RepeatUnit.DAY)
         schedule1.addWhiteInterval(interval11)
         
@@ -113,7 +113,7 @@ class TestGroupManager(object):
         return
 
     def publishGroupKeys(self):
-        timePoint1 = Schedule.fromIsoString("20160620T083000")
+        timePoint1 = Schedule.fromIsoString("20161024T083000")
         result = self.manager.getGroupKey(timePoint1)
 
         # The first is group public key, E-key
@@ -155,8 +155,8 @@ if __name__ == "__main__":
     #loop = asyncio.get_event_loop()
     face = Face()
 
-    groupManagerName = Name("/org/openmhealth/zhehao/")
-    readAccessName = Name("/org/openmhealth/zhehao/read_access_request")
+    groupManagerName = Name("/org/openmhealth/haitao/")
+    readAccessName = Name("/org/openmhealth/haitao/read_access_request")
     dataType = Name("fitness")
 
     testGroupManager = TestGroupManager(face, groupManagerName, dataType, readAccessName, "policy_config/manager-d-key-test.db")

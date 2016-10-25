@@ -26,7 +26,7 @@ class TestConsumer(object):
             # no such file
             pass
 
-        self.groupName = Name("/org/openmhealth/zhehao")
+        self.groupName = Name("/org/openmhealth/haitao")
 
         # Set up the keyChain.
         identityStorage = BasicIdentityStorage()
@@ -83,11 +83,13 @@ class TestConsumer(object):
 
     def startConsuming(self):
         if self.consumeCatalog:
-            contentName = Name("/org/openmhealth/zhehao/SAMPLE/fitness/physical_activity/time_location/catalog/20160620T080000")
-            self.consumer.consume(contentName, self.onCatalogConsumeComplete, self.onConsumeFailed)
+            contentName = Name("/org/openmhealth/haitao/SAMPLE/fitness/physical_activity/time_location/catalog/20161024T213400")
+            catalogInterest = Interest(contentName)
+            self.face.expressInterest(catalogInterest, self.onCatalogConsumeComplete, self.onCatalogConsumeFailed)
+            # self.consumer.consume(contentName, self.onCatalogConsumeComplete, self.onConsumeFailed)
             print "Trying to consume: " + contentName.toUri()
         else:
-            contentName = Name("/org/openmhealth/zhehao/SAMPLE/fitness/physical_activity/time_location/")
+            contentName = Name("/org/openmhealth/haitao/SAMPLE/fitness/physical_activity/time_location/")
             dataNum = 60
             baseZFill = 3
             basetimeString = "20160620T080"
@@ -108,16 +110,20 @@ class TestConsumer(object):
         print "Prefix registration failed: " + prefix.toUri()
         return
 
-    def onCatalogConsumeComplete(self, data, result):
+    def onCatalogConsumeComplete(self, interest, data):
         print "Consume complete for catalog: " + data.getName().toUri()
-        resultObject = json.loads(result.toRawStr())
-
-        contentName = Name("/org/openmhealth/zhehao/SAMPLE/fitness/physical_activity/time_location/")
+        resultObject = json.loads(data.getContent().toRawStr())
+        print data.getContent().toRawStr()
+        contentName = Name("/org/openmhealth/haitao/SAMPLE/fitness/physical_activity/time_location/")
         
         for i in range(0, len(resultObject)):
-            timeString = Schedule.toIsoString(int(resultObject[i]) * 1000)
+            # timeString = Schedule.toIsoString(int(resultObject[i]) * 1000)
+            timeString = resultObject[i]
             self.consumer.consume(Name(contentName).append(timeString), self.onConsumeComplete, self.onConsumeFailed)
             print "Trying to consume: " + Name(contentName).append(timeString).toUri()
+    def onCatalogConsumeFailed(self, interest):
+        print "Data request times out: " + interest.getName().toUri()
+        return
 
     def onConsumeComplete(self, data, result):
         print "Consume complete for data name: " + data.getName().toUri()

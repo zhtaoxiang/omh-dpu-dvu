@@ -15,9 +15,9 @@ var Exclude = require('ndn-js').Exclude;
 var Config = {
 	hostName: "localhost",
   wsPort: 9696,
-  defaultUsername: "zhehao",
+  defaultUsername: "haitao",
   defaultPrefix: "/org/openmhealth/",
-  catalogPrefix: "/data/fitness/physical_activity/time_location/catalog/",
+  catalogPrefix: "/SAMPLE/fitness/physical_activity/time_location/catalog/",
   dataPrefix: "/fitness/physical_activity/time_location/",
   defaultInterestLifetime: 1000,
 
@@ -52,7 +52,7 @@ var memoryContentCache = new MemoryContentCache(face);
 var certificateName = undefined;
 
 // For now, hard-coded group name
-var groupName = new Name("/org/openmhealth/zhehao");
+var groupName = new Name("/org/openmhealth/haitao");
 indexedDB.deleteDatabase("consumer-db");
 var consumerDb = new IndexedDbConsumerDb("consumer-db");
 var DPUPrefix = "/ndn/edu/basel/dpu/bounding_box";
@@ -120,7 +120,7 @@ function onDataNotFound(prefix, interest, face, interestFilterId, filter) {
 
 var onCatalogData = function(interest, data) {
   insertToTree(data);
-  var catalogTimestamp = data.getName().get(-2);
+  var catalogTimestamp = data.getName().get(-1);
   var exclude = new Exclude();
   exclude.appendAny();
   // this looks for the next catalog of this user
@@ -131,16 +131,16 @@ var onCatalogData = function(interest, data) {
   face.expressInterest(nextCatalogInterest, onCatalogData, onCatalogTimeout);
 
   // this looks for the latest version of this catalog; note: this is not a reliable way to get the latest version
-  var catalogVersion = data.getName().get(-1);
-  var nextVersionInterest = new Interest(interest);
-  nextVersionInterest.setName(data.getName().getPrefix(-1));
+  //var catalogVersion = data.getName().get(-1);
+  //var nextVersionInterest = new Interest(interest);
+  //nextVersionInterest.setName(data.getName().getPrefix(-1));
   // to exclude the cached received version;
-  var versionExclude = new Exclude();
-  versionExclude.appendAny();
-  versionExclude.appendComponent(catalogVersion);
-  nextVersionInterest.setExclude(versionExclude);
+  //var versionExclude = new Exclude();
+  //versionExclude.appendAny();
+  //versionExclude.appendComponent(catalogVersion);
+  //nextVersionInterest.setExclude(versionExclude);
   
-  face.expressInterest(nextVersionInterest, onCatalogVersionData, onCatalogVersionTimeout);
+  //face.expressInterest(nextVersionInterest, onCatalogVersionData, onCatalogVersionTimeout);
   catalogTimeoutCnt = 0;
 
   onCatalogVersionData(interest, data);
@@ -150,24 +150,24 @@ var onCatalogVersionData = function(interest, data) {
   console.log("Got versioned catalog: " + data.getName().toUri());
   insertToTree(data);
 
-  var catalogVersion = data.getName().get(-1);
-  var catalogTimestamp = data.getName().get(-2);
+  //var catalogVersion = data.getName().get(-1);
+  var catalogTimestamp = data.getName().get(-1);
 
   var dataContent = JSON.parse(data.getContent().buf().toString('binary'));
   var username = interest.getName().get(2).toEscapedString();
   if (username in userCatalogs) {
     if (catalogTimestamp.toEscapedString() in userCatalogs[username]) {
-      if (userCatalogs[username][catalogTimestamp.toEscapedString()].last_version < catalogVersion.toVersion()) {
-        userCatalogs[username][catalogTimestamp.toEscapedString()] = {"last_version": catalogVersion.toVersion(), "content": dataContent};
-      } else {
+      //if (userCatalogs[username][catalogTimestamp.toEscapedString()].last_version < catalogVersion.toVersion()) {
+      //  userCatalogs[username][catalogTimestamp.toEscapedString()] = {"last_version": catalogVersion.toVersion(), "content": dataContent};
+      //} else {
         console.log("Received duplicate or previous version.");
-      }
+      //}
     } else {
-      userCatalogs[username][catalogTimestamp.toEscapedString()] = {"last_version": catalogVersion.toVersion(), "content": dataContent};
+      userCatalogs[username][catalogTimestamp.toEscapedString()] = {"content": dataContent};
     }
   } else {
     userCatalogs[username] = [];
-    userCatalogs[username][catalogTimestamp.toEscapedString()] = {"last_version": catalogVersion.toVersion(), "content": dataContent};
+    userCatalogs[username][catalogTimestamp.toEscapedString()] = {"content": dataContent};
   }
 }
 
@@ -216,10 +216,12 @@ function getUnencryptedData(catalogs) {
     var name = new Name(Config.defaultPrefix + username).append(new Name("SAMPLE")).append(new Name(Config.dataPrefix));
     for (catalog in catalogs[username]) {
       for (dataItem in catalogs[username][catalog].content) {
-        var isoTimeString = Schedule.toIsoString(catalogs[username][catalog].content[dataItem] * 1000);
+        //var isoTimeString = Schedule.toIsoString(catalogs[username][catalog].content[dataItem] * 1000);
+        var isoTimeString = catalogs[username][catalog].content[dataItem];
         var interest = new Interest(new Name(name).append(isoTimeString));
         interest.setInterestLifetimeMilliseconds(Config.defaultInterestLifetime);
         face.expressInterest(interest, onAppData, onAppDataTimeout);
+        logString("<b>Interest</b>: " + (new Name(name).append(isoTimeString)).toUri() + " <br>");
       }
     }
   }
@@ -234,8 +236,8 @@ function getEncryptedData(catalogs) {
     var name = new Name(Config.defaultPrefix + username).append(new Name("SAMPLE")).append(new Name(Config.dataPrefix));
     for (catalog in catalogs[username]) {
       for (dataItem in catalogs[username][catalog].content) {
-        var isoTimeString = Schedule.toIsoString(catalogs[username][catalog].content[dataItem] * 1000);
-        var isoTimeString = Schedule.toIsoString(catalogs[username][catalog].content[dataItem] * 1000);
+        //var isoTimeString = Schedule.toIsoString(catalogs[username][catalog].content[dataItem] * 1000);
+        var isoTimeString = catalogs[username][catalog].content[dataItem];
         nacConsumer.consume(new Name(name).append(isoTimeString), onConsumeComplete, onConsumeFailed);
         logString("<b>Interest</b>: " + (new Name(name).append(isoTimeString)).toUri() + " <br>");
       }
@@ -380,7 +382,7 @@ function issueDPUInterest(username) {
     username = Config.defaultUsername;
   }
 
-  var parameters = Name.fromEscapedString("/org/openmhealth/zhehao,20160320T080,/org/openmhealth/zhehao/SAMPLE/fitness/physical_activity/processed_result/bounding_box/20160320T080000");
+  var parameters = Name.fromEscapedString("/org/openmhealth/haitao,20160320T08,/org/openmhealth/haitao/SAMPLE/fitness/physical_activity/processed_result/bounding_box/20160320T080000");
   console.log(parameters);
   var name = new Name(DPUPrefix).append(parameters);
   // DistanceTo
